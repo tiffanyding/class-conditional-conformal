@@ -8,6 +8,7 @@ from statsmodels.distributions.empirical_distribution import ECDF # Empirical CD
 #   Misc.
 #========================================
 
+# No longer used
 def transform_to_standard_normal(samples):
     F = ECDF(np.concatenate((samples.flatten(), [-np.inf, np.inf])), side='right')
     F_samples = F(samples)

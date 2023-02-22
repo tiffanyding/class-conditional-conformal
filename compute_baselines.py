@@ -1,7 +1,7 @@
 # Jan 27, 2023
 
 '''
-Example command:
+Example command: python compute_baselines.py "../class-conditional-conformal-datasets/.cache/email_softmax.npy" "../class-conditional-conformal-datasets/.cache/email_labels.npy" 
     
 '''
 
@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 # import pandas as pd
 import pickle
-import torch
+# import torch
 
 from collections import Counter
 from scipy import stats, cluster
@@ -28,7 +28,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('softmax_path', type=str, help='File path of numpy array of softmax scores')
 parser.add_argument('labels_path', type=str, help='File path of numpy array of labels')
 # parser.add_argument('n_min', type=int, help='Minimum number of conformal calibration points per cluster, assuming balanced cluster sizes')
-parser.add_argument('--n_totalcal', type=int, default=20,  help='Total number of calibration points (= # clustering examples + # conformal calibration examples')
+parser.add_argument('--n_totalcal', type=int, default=10,  help='Total number of calibration points (= # clustering examples + # conformal calibration examples')
 parser.add_argument("--alpha", type=float, default=.1, help='Desired coverage is set to 1-alpha')
 
 args = parser.parse_args()
@@ -41,8 +41,6 @@ alpha = args.alpha
 # n_totalcal = 20 # Total number of calibration points (= # clustering examples + # conformal calibration examples)
 # n_min = 100
 
-num_classes = 1000 # Number of classes in ImageNet
-
 print('====== SETTINGS =====')
 # print(f'score_function={score_function}')
 print(f'alpha={alpha}')
@@ -52,10 +50,12 @@ print('=====================')
     
 
 ## 1. Get data ============================
-print('Loading scores and labels...')
+print('Loading softmax scores and labels...')
 
 softmax_scores = np.load(args.softmax_path)
 labels = np.load(args.labels_path)
+
+num_classes = labels.max()
 
 for score_function in ['softmax', 'APS', 'RAPS']:
     
@@ -66,7 +66,7 @@ for score_function in ['softmax', 'APS', 'RAPS']:
         scores_all = 1 - softmax_scores
     elif score_function == 'APS':
         scores_all = get_APS_scores_all(softmax_scores, randomize=True)
-    elif: 
+    elif score_function == 'RAPS': 
         # RAPS hyperparameters
         lmbda = .01 
         kreg = 5
@@ -114,8 +114,8 @@ for score_function in ['softmax', 'APS', 'RAPS']:
     vanilla_set_size_metrics = {'mean': np.mean(vanilla_set_sizes), '[.25, .5, .75, .9] quantiles': np.quantile(vanilla_set_sizes, [.25, .5, .75, .9])}
     naivecb_set_sizes = [len(x) for x in naivecb_preds]
     naivecb_set_size_metrics = {'mean': np.mean(naivecb_set_sizes), '[.25, .5, .75, .9] quantiles': np.quantile(naivecb_set_sizes, [.25, .5, .75, .9])}
-    print(f'[Vanilla] set size metrics:' vanilla_set_size_metrics)
-    print(f'[NaiveCC] set size metrics:' naivecb_set_size_metrics)
+    print(f'[Vanilla] set size metrics:', vanilla_set_size_metrics)
+    print(f'[NaiveCC] set size metrics:', naivecb_set_size_metrics)
 
 
 print(f'TIME TAKEN: {(time.time() - st)/60:.2f} min')
