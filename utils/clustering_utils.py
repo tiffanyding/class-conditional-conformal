@@ -2,24 +2,53 @@ import joblib
 import numpy as np
 
 from scipy import stats
-from statsmodels.distributions.empirical_distribution import ECDF # Empirical CDF
+# from statsmodels.distributions.empirical_distribution import ECDF # Empirical CDF
 
 #========================================
 #   Misc.
 #========================================
 
+# # No longer used
+# def transform_to_standard_normal(samples):
+#     F = ECDF(np.concatenate((samples.flatten(), [-np.inf, np.inf])), side='right')
+#     F_samples = F(samples)
+#     final_samples = stats.norm.ppf(F_samples)
+
+#     return final_samples
+
+#========================================
+#   Computing embeddings for k-means
+#========================================
+
+def quantile_embedding(samples, q=[0.5, 0.6, 0.7, 0.8, 0.9]):
+    '''
+    Computes the q-quantiles of samples and returns the vector of quantiles
+    '''
+    return np.quantile(samples, q)
+
+def embed_all_classes(scores_all, labels, q=[0.5, 0.6, 0.7, 0.8, 0.9]):
+    '''
+    Input:
+        - scores_all: num_instances x num_classes array where 
+        cal_class_scores[i,j] = score of class j for instance i
+        - labels: num_instances-length array of true class labels
+        
+    Output: num_classes x len(q) array where ith row is the embeddings of class i
+    '''
+    num_classes = scores_all.shape[1]
+    
+    embeddings = np.zeros((num_classes, len(q)))
+    for i in range(num_classes):
+        class_i_scores = scores_all[labels==i,i]
+        embeddings[i,:] = quantile_embedding(class_i_scores, q=q)
+    
+    return embeddings
+
+#========================================
+#   Computing distances for agglomorative clustering
+#========================================
+
 # No longer used
-def transform_to_standard_normal(samples):
-    F = ECDF(np.concatenate((samples.flatten(), [-np.inf, np.inf])), side='right')
-    F_samples = F(samples)
-    final_samples = stats.norm.ppf(F_samples)
-
-    return final_samples
-
-#========================================
-#   Computing distances
-#========================================
-
 def compute_distance_metric(samples1, samples2, dist_metric, 
                             quantiles=None, weights=None):
     '''
@@ -81,6 +110,7 @@ def kolmogorov_smirnov_pvalue(i, j, scores, labels):
     
     return result.pvalue
 
+# No longer used
 def compute_distance_matrix(scores1_all, labels1, num_classes, n_jobs=4):
     pvalues = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(kolmogorov_smirnov_pvalue)(i, j, scores1_all, labels1) for j in range(num_classes) for i in range(num_classes))
     distances = 1 - np.array(pvalues)
