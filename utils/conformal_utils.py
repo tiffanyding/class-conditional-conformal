@@ -59,28 +59,15 @@ def split_X_and_y(X, y, n_k, num_classes=1000, seed=0):
     
     return X1, y1, X2, y2
 
-#     np.random.seed(seed)
+def get_true_class_conformal_score(scores_all, labels):
+    '''
+    Extracts conformal scores that corresponds to the true class labels
     
-#     X1 = np.zeros((num_classes * n_k, num_classes))
-#     y1 = np.zeros((num_classes * n_k, ), dtype=np.int32)
-    
-#     all_selected_indices = np.zeros(y.shape)
-
-#     for k in range(num_classes):
-
-#         # Randomly select n instances of class k
-#         idx = np.argwhere(y==k).flatten()
-#         selected_idx = np.random.choice(idx, replace=False, size=(n_k,))
-
-#         X1[n_k*k:n_k*(k+1), :] = X[selected_idx, :]
-#         y1[n_k*k:n_k*(k+1)] = k
-        
-#         all_selected_indices[selected_idx] = 1
-        
-#     X2 = X[all_selected_indices == 0]
-#     y2 = y[all_selected_indices == 0]
-    
-#     return X1, y1, X2, y2
+    Inputs:
+        scores_all: n x num_classes array 
+        labels: length-n array of true class labels
+    '''
+    return scores_all[np.arange(len(labels)), labels]
 
 #========================================
 #   Standard conformal inference
