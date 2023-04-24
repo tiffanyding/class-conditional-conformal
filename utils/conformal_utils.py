@@ -7,7 +7,7 @@ import torch
 from collections import Counter
 
 # For Clustered Conformal
-from .clustering_utils import embed_all_classes
+from .clustering_utils import embed_all_classes, test_one_cluster_null
 from sklearn.cluster import KMeans
 
 #========================================
@@ -179,7 +179,7 @@ def create_cb_prediction_sets(class_scores, q_hats):
     return set_preds
 
 #========================================
-#   Clustered conformal inference
+#   Clustered conformal prediction
 #========================================
 
 def compute_cluster_specific_qhats(cluster_assignments, cal_class_scores, cal_true_labels, alpha=.05, default_qhat=None):
@@ -214,15 +214,38 @@ def compute_cluster_specific_qhats(cluster_assignments, cal_class_scores, cal_tr
 
     # Note: To create prediction sets, just pass class_qhats into create_cb_prediction_sets()
     
-# Full Clustered Conformal pipeline
+# Full Clustered Conformal pipeline for pre-specified n_clustering and num_clusters
 def clustered_conformal(totalcal_scores_all, totalcal_labels,
                         alpha,
                         n_clustering, num_clusters,
                         val_scores_all=None, val_labels=None):
     '''
-    Helper for automatic_clustered_conformal() that assumes clustering_frac
-    and num_clusters are given. See automatic_clustered_conformal() for documentation.
+    Use totalcal_scores and total_labels to compute conformal quantiles for each
+    class using the clustered conformal procedure. Optionally evaluates 
+    performance on val_scores and val_labels
     
+    Inputs:
+         - totalcal_scores: num_instances x num_classes array where 
+           cal_class_scores[i,j] = score of class j for instance i
+         - totalcal_labels: num_instances-length array of true class labels (0-indexed classes)
+         - alpha: number between 0 and 1 that determines coverage level.
+         Coverage level will be 1-alpha.
+         - n_clustering: Number of points per class to use for clustering step. The remaining
+         points are used for the conformal calibration step.
+         - num_clusters: Number of clusters to group classes into
+         - val_scores: num_val_instances x num_classes array, or None. If not None, 
+         the class coverage gap and average set sizes will be computed on val_scores
+         and val_labels.
+         - val_labels: num_val_instances-length array of true class labels, or None. 
+         If not None, the class coverage gap and average set sizes will be computed 
+         on val_scores and val_labels.
+         
+    Outputs:
+        - qhats: num_classes-length array where qhats[i] = conformal quantial estimate for class i
+        - [Optionally, if val_scores and val_labels are not None] 
+            - val_preds: clustered conformal predictions on val_scores
+            - val_class_coverage_gap: Class coverage gap, compute on val_scores and val_labels
+            - val_set_size_metrics: Dict containing set size metrics, compute on val_scores and val_labels
     '''
     
     num_classes = totalcal_scores_all.shape[1]
@@ -255,133 +278,115 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
     # 4) [Optionally] Apply to val set. Evaluate class coverage gap and set size 
     if (val_scores_all is not None) and (val_labels is not None):
         preds = create_cb_prediction_sets(val_scores_all, qhats)
-        class_cond_cov = compute_class_specific_coverage(val_labels, preds)
-        
-        # Average class coverage gap
-        avg_class_cov_gap = np.mean(np.abs(class_cond_cov - (1-alpha)))
-        
-        # Average gap for classes that are over-covered
-        overcov_idx = (class_cond_cov > (1-alpha))
-        overcov_gap = np.mean(class_cond_cov[overcov_idx] - (1-alpha))
-        
-        # Average gap for classes that are over-covered
-        overcov_idx = (class_cond_cov < (1-alpha))
-        undercov_gap = np.mean(np.abs(class_cond_cov[overcov_idx] - (1-alpha)))
-        
-        # Marginal coverage
-        marginal_cov = compute_coverage(val_labels, preds)
-        
-        # TODO: Compute average class cov if we leave out classes from smallest cluster
-        
-        class_cov_metrics = {'mean_class_cov_gap': avg_class_cov_gap, 
-                             'undercov_gap': undercov_gap, 
-                             'overcov_gap': overcov_gap, 
-                             'marginal_cov': marginal_cov,
-                             'raw_class_coverages': class_cond_cov}
-
-        curr_set_sizes = [len(x) for x in preds]
-        set_size_metrics = {'mean': np.mean(curr_set_sizes), '[.25, .5, .75, .9] quantiles': np.quantile(curr_set_sizes, [.25, .5, .75, .9])}
+        class_cov_metrics, set_size_metrics = compute_all_metrics(val_labels, preds, alpha,
+                                                                  cluster_assignments=cluster_assignments)
         
         return qhats, preds, class_cov_metrics, set_size_metrics
     else:
         return qhats
-
-# WIP!!!
-def automatic_clustered_conformal(totalcal_scores, totalcal_labels,
-                        alpha,
-                        tune_parameters=True,
-                        n_clustering=None, num_clusters=None,
-                        val_scores=None, val_labels=None):
+    
+def get_clustering_parameters(num_classes, n_totalcal):
     '''
-    Use totalcal_scores and total_labels to compute conformal quantiles for each
-    class using the clustered conformal procedure. Optionally evaluates 
+    Returns a guess of good values for num_clusters and n_clustering based solely 
+    on the number of classes and the number of examples per class. 
+    
+    This relies on two heuristics:
+    1) We want at least 150 points per cluster on average
+    2) We need more samples as we try to distinguish between more distributions. 
+    To distinguish between 2 distribution, want at least 4 samples per class. 
+    To distinguish between 5 distributions, want at least 10 samples per class. 
+    
+    Output: n_clustering, num_clusters
+    
+    '''
+    # Alias for convenience
+    K = num_classes
+    N = n_totalcal
+    
+    n_clustering = int(N*K/(75+K))
+    num_clusters = int(np.floor(n_clustering / 2))
+    
+    return n_clustering, num_clusters
+
+def automatic_clustered_conformal(totalcal_scores_all, totalcal_labels,
+                        alpha,
+                        val_scores_all, val_labels,
+                        cluster='smart'):
+    '''
+    Use totalcal_scores_all and total_labels to compute conformal quantiles for each
+    class using the clustered conformal procedure. Evaluates 
     performance on val_scores and val_labels
     
     Inputs:
-         - totalcal_scores: num_instances x num_classes array where 
+         - totalcal_scores_all: num_instances x num_classes array where 
            cal_class_scores[i,j] = score of class j for instance i
          - totalcal_labels: num_instances-length array of true class labels (0-indexed classes)
          - alpha: number between 0 and 1 that determines coverage level.
          Coverage level will be 1-alpha.
-         - tune_parameters: If True, ignore n_clustering and num_clusters
-         and tune the parameters using the elbow method. If False, use n_clustering
-         and num_clusters
-         - n_clustering: Number of points per class to use for clustering step. The remaining
-         points are used for the conformal calibration step.
-         - num_clusters: Number of clusters to group classes into
-         - val_scores: num_val_instances x num_classes array, or None. If not None, 
-         the class coverage gap and average set sizes will be computed on val_scores
+         - val_scores: num_val_instances x num_classes array. Class coverage gap and 
+         average set sizes will be computed on val_scores
          and val_labels.
-         - val_labels: num_val_instances-length array of true class labels, or None. 
-         If not None, the class coverage gap and average set sizes will be computed 
-         on val_scores and val_labels.
-         
+         - val_labels: num_val_instances-length array of true class labels. Class coverage 
+         gap and average set sizes will be computed on val_scores 
+         and val_labels.
+         - cluster: 'smart' or 'always'. In both cases, the clustering settings (n_clustering 
+         and num_clusters) are chosen using get_clustering_parameters(). When cluster=='smart',
+         we perform a hypothesis test to determine if we should cluster or not 
+         cluster using the chosen settings. When cluster=='always' is chosen, we always cluster
+         using the chosen settings.
     Outputs:
-        - qhats: num_classes-length array where qhats[i] = conformal quantial estimate for class i
-        - [Optionally, if val_scores and val_labels are not None] 
-            - val_preds: clustered conformal predictions on val_scores
-            - val_class_coverage_gap: Class coverage gap, compute on val_scores and val_labels
-            - val_set_size_metrics: Dict containing set size metrics, compute on val_scores and val_labels
+        - qhats: num_classes-length array where qhats[i] = conformal quantile estimate for class i
+        - val_preds: clustered conformal predictions on val_scores
+        - val_class_coverage_gap: Class coverage gap, compute on val_scores and val_labels
+        - val_set_size_metrics: Dict containing set size metrics, compute on val_scores and val_labels
     '''
     
-    num_classes = totalcal_scores.shape[1]
+    num_classes = totalcal_scores_all.shape[1]
+    n_totalcal = min(Counter(totalcal_labels).values()) # Count is based on rarest class
     
-    if not tune_parameters:
-        assert n_clustering is not None and num_clusters is not None, \
-        'When tune_parameters=False, clustering_frac and num_clusters must be defined'
-        
-        return _clustered_conformal(totalcal_scores, totalcal_labels,
-                                    alpha,
-                                    n_clustering, num_clusters,
-                                    val_scores=val_scores, val_labels=val_labels)
-    else:
-        
-        # List of possible amounts of data to use for clustering
-        # Try [.3, .5, .7, .9]-fractions of the rarest class in the calibration dataset
-        rarest_class_ct = Counter(totalcal_labels).most_common()[-1][1]
-        n_clustering_list = (np.array([.3, .5, .7, .9]) * rarest_class_ct).astype(np.int32)
-        
-        # List of possible numbers of clusters (1 through 10% of num_classes)
-        num_clusters_list = np.arange(1, np.ceil(.1 * num_classes)+1)
-        
-        best_k = [] # Best k for each n_clustering
-        best_k_score = [] # Inertia for each best k
-        
-        for n_clustering in n_clustering_list:
-            
-            # 0) Split data 
-            scores1_all, labels1, scores2_all, labels2 = split_X_and_y(totalcal_scores_all, 
+    # Heuristically choose clustering parameters
+    n_clustering, num_clusters = get_clustering_parameters(num_classes, n_totalcal)
+    print(f'Heuristic chose n_clustering={n_clustering}, num_clusters={num_clusters}')
+    
+    
+    # If applicable, perform hypothesis test
+    if cluster == 'smart':
+        pval_threshold = .01
+        # Split data between clustering and calibration
+        scores1_all, labels1, _, _ = split_X_and_y(totalcal_scores_all, 
                                                                totalcal_labels, 
                                                                n_clustering, 
                                                                num_classes=num_classes, 
                                                                seed=0)
-    
-            # 1) Compute embedding for each class
-            embeddings = embed_all_classes(scores1_all, labels1, q=[0.5, 0.6, 0.7, 0.8, 0.9])
-         
-            # 2) Do k-means with different k's
-            optimalK = OptimalK(parallel_backend='joblib')
-            maxgap_n_clusters = optimalK(embeddings, cluster_array=num_clusters_list)
+        pval = test_one_cluster_null(scores1_all, labels1, num_classes, num_clusters, 
+                                    num_trials=100, seed=0, print_results=False)
         
-            df = optimalK.gap_df
-            firstposdiff_n_clusters = int(df[df['diff'] > 0]['n_clusters'].tolist()[0])
-            gap_value = df[df['n_clusters'] == firstposdiff_n_clusters]['gap_value'].tolist()[0]
+        if pval < pval_threshold: 
+            print(f'p={pval} for one cluster null hypothesis, so running Clustered Conformal')
+            # Run clustered conformal and return prediction sets
+            qhats, preds, coverage_metrics, set_size_metrics = clustered_conformal(totalcal_scores_all, totalcal_labels,
+                                                                        alpha,
+                                                                        n_clustering, num_clusters,
+                                                                        val_scores_all=val_scores_all, val_labels=val_labels)
+        else:
+            print(f'p={pval} for one cluster null hypothesis, so running Standard Conformal')
+            # Run Standard Conformal and return prediction sets 
+            standard_qhat = compute_qhat(totalcal_scores_all, totalcal_labels, alpha=alpha)
+            preds = create_prediction_sets(val_scores_all, standard_qhat)
 
-            best_k.append(firstposdiff_n_clusters)
-            best_k_score.append(gap_value)
-            
-            
-        # Select n_clustering with lowest gap value at the elbow
-        min_idx = np.argmin(best_k_score)
-        best_n_clustering = n_clustering_list[min_idx]
-        best_num_clusters = best_k[min_idx]
-        print('Best n_clustering:', best_n_clustering)
-        print('Best num_clusters:', best_num_clusters)
-        
-        return _clustered_conformal(totalcal_scores, totalcal_labels,
-                                    alpha,
-                                    best_n_clustering, best_num_clusters,
-                                    val_scores=val_scores, val_labels=val_labels)
+            coverage_metrics, set_size_metrics = compute_all_metrics(val_labels, preds, alpha)
+            qhats = standard_qhat * np.ones((num_classes,))
+    elif cluster == 'always':
+        # Run clustered conformal and return prediction sets
+        qhats, preds, coverage_metrics, set_size_metrics = clustered_conformal(totalcal_scores_all, totalcal_labels,
+                                                                    alpha,
+                                                                    n_clustering, num_clusters,
+                                                                    val_scores_all=val_scores_all, val_labels=val_labels)
+    else:
+        raise NotImplementedError('Valid options for cluster are "smart" and "always"')
+    
+    return qhats, preds, coverage_metrics, set_size_metrics
+   
             
         
 #========================================
@@ -495,7 +500,6 @@ def get_RAPS_scores_all(softmax_scores, lmbda, kreg, randomize=True):
 #   Evaluation
 #========================================
 
-
 # Helper function for computing accuracy (marginal coverage) of confidence sets
 def compute_coverage(true_labels, set_preds):
     true_labels = np.array(true_labels) # Convert to numpy to avoid weird pytorch tensor issues
@@ -522,3 +526,47 @@ def compute_class_specific_coverage(true_labels, set_preds):
 # Helper function for computing average set size
 def compute_avg_set_size(list_of_arrays):
     return np.mean([len(arr) for arr in list_of_arrays])
+
+def compute_all_metrics(val_labels, preds, alpha, cluster_assignments=None):
+    class_cond_cov = compute_class_specific_coverage(val_labels, preds)
+        
+    # Average class coverage gap
+    avg_class_cov_gap = np.mean(np.abs(class_cond_cov - (1-alpha)))
+
+    # Average gap for classes that are over-covered
+    overcov_idx = (class_cond_cov > (1-alpha))
+    overcov_gap = np.mean(class_cond_cov[overcov_idx] - (1-alpha))
+
+    # Average gap for classes that are under-covered
+    undercov_idx = (class_cond_cov < (1-alpha))
+    undercov_gap = np.mean(np.abs(class_cond_cov[undercov_idx] - (1-alpha)))
+    
+    # Max gap
+    max_gap = np.max(np.abs(class_cond_cov - (1-alpha)))
+
+    # Marginal coverage
+    marginal_cov = compute_coverage(val_labels, preds)
+
+    # TODO: Compute average class cov if we leave out classes from smallest cluster
+#     # TODO: check if this works in other notebook
+#     if cluster_assignments is not None: 
+#         cts = Counter(cluster_assignments)
+#         smallest_cluster = cts.most_common()[-1][0]
+#         classes_not_in_smallest = np.where(cluster_assignments!=smallest_cluster)
+#         filtered_class_cond_cov = class_cond_cov[classes_not_in_smallest]
+#         filtered_avg_class_cov_gap = np.mean(np.abs(class_cond_cov - (1-alpha)))
+        
+
+    class_cov_metrics = {'mean_class_cov_gap': avg_class_cov_gap, 
+                         'undercov_gap': undercov_gap, 
+                         'overcov_gap': overcov_gap, 
+                         'max_gap': max_gap,
+                         'marginal_cov': marginal_cov,
+                         'raw_class_coverages': class_cond_cov,
+                         'cluster_assignments': cluster_assignments # Also save class cluster assignments
+                        }
+
+    curr_set_sizes = [len(x) for x in preds]
+    set_size_metrics = {'mean': np.mean(curr_set_sizes), '[.25, .5, .75, .9] quantiles': np.quantile(curr_set_sizes, [.25, .5, .75, .9])}
+    
+    return class_cov_metrics, set_size_metrics
