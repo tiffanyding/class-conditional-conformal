@@ -113,12 +113,13 @@ def initialize_metrics_dict(methods):
     for method in methods:
         metrics[method] = {'class_cov_gap': [],
                            'max_class_cov_gap': [],
-                           'avg_set_size': []} # Could also retrieve other metrics
+                           'avg_set_size': [],
+                           'marginal_cov': []} # Could also retrieve other metrics
         
     return metrics
 
 
-def average_results_across_seeds(folder, print_results=True):
+def average_results_across_seeds(folder, print_results=True, display_table=True):
     
     methods = ['standard', 
                'classwise', 
@@ -127,7 +128,8 @@ def average_results_across_seeds(folder, print_results=True):
     
     file_names = sorted(glob.glob(os.path.join(folder, '*.pkl')))
     num_seeds = len(file_names)
-    print('Number of seeds found:', num_seeds)
+    if display_table:
+        print('Number of seeds found:', num_seeds)
     
     metrics = initialize_metrics_dict(methods)
     
@@ -139,6 +141,7 @@ def average_results_across_seeds(folder, print_results=True):
             metrics[method]['class_cov_gap'].append(results[method][2]['mean_class_cov_gap'])
             metrics[method]['avg_set_size'].append(results[method][3]['mean'])
             metrics[method]['max_class_cov_gap'].append(results[method][2]['max_gap'])
+            metrics[method]['marginal_cov'].append(results[method][2]['marginal_cov'])
             
     cov_means = []
     cov_ses = []
@@ -146,6 +149,8 @@ def average_results_across_seeds(folder, print_results=True):
     set_size_ses = []
     max_cov_gap_means = []
     max_cov_gap_ses = []
+    marginal_cov_means = []
+    marginal_cov_ses = []
     
     if print_results:
         print('Avg class coverage gap for each random seed:')
@@ -161,15 +166,22 @@ def average_results_across_seeds(folder, print_results=True):
         max_cov_gap_means.append(np.mean(metrics[method]['max_class_cov_gap']))
         max_cov_gap_ses.append(np.std(metrics[method]['max_class_cov_gap']))
         
+        marginal_cov_means.append(np.mean(metrics[method]['marginal_cov']))
+        marginal_cov_ses.append(np.std(metrics[method]['marginal_cov']))
+        
     df = pd.DataFrame({'method': methods,
                       'class_cov_gap_mean': np.array(cov_means)*100,
                       'class_cov_gap_se': np.array(cov_ses)*100,
                       'max_class_cov_gap_mean': np.array(max_cov_gap_means)*100,
                       'max_class_cov_gap_se': np.array(max_cov_gap_ses)*100,
                       'avg_set_size_mean': set_size_means,
-                      'avg_set_size_se': set_size_ses})
+                      'avg_set_size_se': set_size_ses,
+                      'marginal_cov_mean': marginal_cov_means,
+                      'marginal_cov_se': marginal_cov_ses})
     
-    display(df) # For Jupyter notebooks
+    if display_table:
+        display(df) # For Jupyter notebooks
+        
     return df
 
 def plot_class_coverage_histogram(folder, desired_cov=None, vmin=.6, vmax=1, nbins=30, title=None):
