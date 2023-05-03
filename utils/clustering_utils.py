@@ -136,23 +136,39 @@ def quantile_embedding(samples, q=[0.5, 0.6, 0.7, 0.8, 0.9]):
     '''
     return np.quantile(samples, q)
 
-def embed_all_classes(scores_all, labels, q=[0.5, 0.6, 0.7, 0.8, 0.9]):
+def embed_all_classes(scores_all, labels, q=[0.5, 0.6, 0.7, 0.8, 0.9], return_cts=False):
     '''
     Input:
         - scores_all: num_instances x num_classes array where 
-        cal_class_scores[i,j] = score of class j for instance i
+            scores_all[i,j] = score of class j for instance i
+          Alternatively, num_instances-length array where scores_all[i] = score of true class for instance i
         - labels: num_instances-length array of true class labels
+        - q: quantiles to include in embedding
+        - return_cts: if True, return an array containing the counts for each class 
         
-    Output: num_classes x len(q) array where ith row is the embeddings of class i
+    Output: 
+        - embeddings: num_classes x len(q) array where ith row is the embeddings of class i
+        - (Optional) cts: num_classes-length array where cts[i] = # of times class i 
+        appears in labels 
     '''
-    num_classes = scores_all.shape[1]
+    num_classes = len(np.unique(labels))
     
     embeddings = np.zeros((num_classes, len(q)))
+    cts = np.zeros((num_classes,))
+    
     for i in range(num_classes):
-        class_i_scores = scores_all[labels==i,i]
+        if len(scores_all.shape) == 2:
+            class_i_scores = scores_all[labels==i,i]
+        else:
+            class_i_scores = scores_all[labels==i] 
+        cts[i] = class_i_scores.shape[0]
         embeddings[i,:] = quantile_embedding(class_i_scores, q=q)
     
-    return embeddings
+    if return_cts:
+        return embeddings, cts
+    else:
+        return embeddings
+    
 
 #========================================
 #   Computing distances for agglomorative clustering
