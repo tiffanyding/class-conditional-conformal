@@ -66,15 +66,24 @@ def load_dataset(dataset, remove_rare_cls=False):
         softmax_path = '/home/tding/data/finetuned_imagenet/imagenet_train_subset_softmax.npy'
         labels_path = '/home/tding/data/finetuned_imagenet/imagenet_train_subset_labels.npy'
     elif dataset == 'cifar-100':
-        softmax_path = "../class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-valsoftmax_frac=0.3.npy"
-        labels_path = "../class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-vallabels_frac=0.3.npy"
+        softmax_path = "../class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-fracval=0.5-valsoftmax_frac=0.5.npy"
+        labels_path = "../class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-fracval=0.5-vallabels_frac=0.5.npy"
+#         softmax_path = "../class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-fracval=0.7-valsoftmax_frac=0.7.npy"
+#         labels_path = "../class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-fracval=0.7-vallabels_frac=0.7.npy"
     elif dataset == 'places365':
         softmax_path = '../class-conditional-conformal-datasets/notebooks/.cache/best-Places365-model-valsoftmax_frac=0.1.npy'
         labels_path = '../class-conditional-conformal-datasets/notebooks/.cache/best-Places365-model-vallabels_frac=0.1.npy'
     elif dataset == 'inaturalist':
+        # 'family' level
         softmax_path = '../class-conditional-conformal-datasets/notebooks/.cache/best-iNaturalist-model-valsoftmax_frac=0.5.npy'
         labels_path = '../class-conditional-conformal-datasets/notebooks/.cache/best-iNaturalist-model-vallabels_frac=0.5.npy'
     
+#         # full species level (6414 classes before filtering)
+#         softmax_path = '../class-conditional-conformal-datasets/notebooks/.cache/archived/best-iNaturalist-model-valsoftmax_frac=0.5.npy'
+#         labels_path = '../class-conditional-conformal-datasets/notebooks/.cache/archived/best-iNaturalist-model-vallabels_frac=0.5.npy'
+    
+        
+        
         remove_rare_cls = True
 
     softmax_scores = np.load(softmax_path)
@@ -83,13 +92,14 @@ def load_dataset(dataset, remove_rare_cls=False):
     print('softmax_scores shape:', softmax_scores.shape) 
     
     if remove_rare_cls:
-        softmax_scores, labels = remove_rare_classes(softmax_scores, labels, thresh=150)
+        thresh = 250 # changed from 150
+        softmax_scores, labels = remove_rare_classes(softmax_scores, labels, thresh=250)
     
     return softmax_scores, labels
 
 
 def run_one_experiment(dataset, save_folder, alpha, n_totalcal, score_function_list, methods, seeds, 
-                       save_preds=False, calibration_sampling='random'):
+                       save_preds=False, calibration_sampling='random', save_labels=False):
     '''
     Inputs:
         - dataset: string specifying dataset. Options are 'imagenet', 'cifar-100', 'places365', 'inaturalist'
@@ -100,7 +110,9 @@ def run_one_experiment(dataset, save_folder, alpha, n_totalcal, score_function_l
         - save_preds: if True, the val prediction sets are included in the saved outputs
         - calibration_sampling: Method for sampling calibration dataset. Options are 
         'random' or 'balanced'
+        - save_labels: If True, save the labels for each random seed in {save_folder}seed={seed}_labels.npy
     '''
+    np.random.seed(0)
     
     softmax_scores, labels = load_dataset(dataset)
     
@@ -143,7 +155,8 @@ def run_one_experiment(dataset, save_folder, alpha, n_totalcal, score_function_l
             elif calibration_sampling == 'balanced':
                 num_classes = scores_all.shape[1]
                 totalcal_scores_all, totalcal_labels, val_scores_all, val_labels = split_X_and_y(scores_all, 
-                                                                                                labels, n_totalcal, num_classes, seed=0, split='balanced')
+                                                                                                labels, n_totalcal, num_classes, 
+                                                                                                seed=seed, split='balanced')
             else:
                 raise Exception('Invalid calibration_sampling option')
           
@@ -152,7 +165,7 @@ def run_one_experiment(dataset, save_folder, alpha, n_totalcal, score_function_l
             print(f'Class counts range from {min(cts)} to {max(cts)}')
 
             for method in methods:
-                print(f'dataset={dataset}, n={n_totalcal},score_function={score_function}, seed={seed}, method={method}')
+                print(f'----- dataset={dataset}, n={n_totalcal},score_function={score_function}, seed={seed}, method={method} ----- ')
 
                 if method == 'standard':
                     # Standard conformal
@@ -163,20 +176,22 @@ def run_one_experiment(dataset, save_folder, alpha, n_totalcal, score_function_l
                     # Classwise conformal  
                     all_results[method] = classwise_conformal_pipeline(totalcal_scores_all, totalcal_labels, 
                                                                        val_scores_all, val_labels, alpha, 
+                                                                       num_classes=totalcal_scores_all.shape[1],
                                                                        default_qhat=np.inf, regularize=False)
 
                 elif method == 'classwise_default_standard':
                     # Classwise conformal, but use standard qhat as default value instead of infinity 
                     all_results[method] = classwise_conformal_pipeline(totalcal_scores_all, totalcal_labels, 
                                                                        val_scores_all, val_labels, alpha, 
+                                                                       num_classes=totalcal_scores_all.shape[1],
                                                                        default_qhat='standard', regularize=False)
                     
-                elif method == 'cluster_balanced':
-                    # Clustered conformal with balanced clustering set (does NOT provide cluster-conditional coverage)
-                    all_results[method] = clustered_conformal(totalcal_scores_all, totalcal_labels,
-                                                                                    alpha,
-                                                                            val_scores_all, val_labels, 
-                                                                            split='balanced')
+#                 elif method == 'cluster_balanced': # Deprecated
+#                     # Clustered conformal with balanced clustering set (does NOT provide cluster-conditional coverage)
+#                     all_results[method] = clustered_conformal(totalcal_scores_all, totalcal_labels,
+#                                                                                     alpha,
+#                                                                             val_scores_all, val_labels, 
+#                                                                             split='balanced')
                 elif method == 'cluster_proportional':
                     # Clustered conformal with proportionally sampled clustering set
                     all_results[method] = clustered_conformal(totalcal_scores_all, totalcal_labels,
@@ -191,11 +206,18 @@ def run_one_experiment(dataset, save_folder, alpha, n_totalcal, score_function_l
                                                                             val_scores_all, val_labels, 
                                                                             split='doubledip')
 
+                elif method == 'cluster_random':
+                    # Clustered conformal with double dipping for clustering and calibration
+                    all_results[method] = clustered_conformal(totalcal_scores_all, totalcal_labels,
+                                                                                    alpha,
+                                                                            val_scores_all, val_labels, 
+                                                                            split='random')
                 elif method == 'regularized_classwise':
                     
                     # Empirical-Bayes-inspired regularized classwise conformal (shrink class qhats to standard)
                     all_results[method] = classwise_conformal_pipeline(totalcal_scores_all, totalcal_labels, 
                                                                        val_scores_all, val_labels, alpha, 
+                                                                       num_classes=totalcal_scores_all.shape[1],
                                                                        default_qhat='standard', regularize=True)
                 else: 
                     raise Exception('Invalid method selected')
@@ -204,7 +226,13 @@ def run_one_experiment(dataset, save_folder, alpha, n_totalcal, score_function_l
             if not save_preds:
                 for m in all_results.keys():
                     all_results[m] = (all_results[m][0], None, all_results[m][2], all_results[m][3])
-
+                    
+            # Optionally save val labels
+            if save_labels:
+                save_labels_to = os.path.join(curr_folder, f'seed={seed}_labels.npy')
+                np.save(save_labels_to, val_labels)
+                print(f'Saved labels to {save_labels_to}')
+                
             # Save results 
             with open(save_to,'wb') as f:
                 pickle.dump(all_results, f)
@@ -314,13 +342,21 @@ def initialize_metrics_dict(methods):
 
 
 def average_results_across_seeds(folder, print_results=True, display_table=True, 
-                                 methods=['standard', 'classwise', 'cluster_balanced']):
+                                 methods=['standard', 'classwise', 'cluster_balanced'],
+                                 max_seeds=np.inf):
+    '''
+    Input:
+        - max_seeds: If we discover more than max_seeds random seeds, only use max_seeds of them
+    '''
 
     
     file_names = sorted(glob.glob(os.path.join(folder, '*.pkl')))
     num_seeds = len(file_names)
 #     if display_table:
     print('Number of seeds found:', num_seeds)
+    if max_seeds < np.inf and num_seeds > max_seeds:
+        print(f'Only using {max_seeds} seeds')
+        file_names = file_names[:max_seeds]
     
     metrics = initialize_metrics_dict(methods)
     
@@ -354,22 +390,23 @@ def average_results_across_seeds(folder, print_results=True, display_table=True,
     if print_results:
         print('Avg class coverage gap for each random seed:')
     for method in methods:
+        n = num_seeds
         if print_results:
             print(f'  {method}:', np.array(metrics[method]['class_cov_gap'])*100)
         cov_means.append(np.mean(metrics[method]['class_cov_gap']))
-        cov_ses.append(np.std(metrics[method]['class_cov_gap']))
+        cov_ses.append(np.std(metrics[method]['class_cov_gap'])/np.sqrt(n))
         
         set_size_means.append(np.mean(metrics[method]['avg_set_size']))
-        set_size_ses.append(np.std(metrics[method]['avg_set_size']))
+        set_size_ses.append(np.std(metrics[method]['avg_set_size'])/np.sqrt(n))
         
         max_cov_gap_means.append(np.mean(metrics[method]['max_class_cov_gap']))
-        max_cov_gap_ses.append(np.std(metrics[method]['max_class_cov_gap']))
+        max_cov_gap_ses.append(np.std(metrics[method]['max_class_cov_gap'])/np.sqrt(n))
         
         marginal_cov_means.append(np.mean(metrics[method]['marginal_cov']))
-        marginal_cov_ses.append(np.std(metrics[method]['marginal_cov']))
+        marginal_cov_ses.append(np.std(metrics[method]['marginal_cov'])/np.sqrt(n))
         
         very_undercovered_means.append(np.mean(metrics[method]['very_undercovered']))
-        very_undercovered_ses.append(np.std(metrics[method]['very_undercovered']))
+        very_undercovered_ses.append(np.std(metrics[method]['very_undercovered'])/np.sqrt(n))
         
     df = pd.DataFrame({'method': methods,
                       'class_cov_gap_mean': np.array(cov_means)*100,
