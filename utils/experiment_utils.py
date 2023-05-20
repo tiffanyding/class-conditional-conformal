@@ -16,10 +16,10 @@ from utils.conformal_utils import *
 # For plotting
 map_to_label = {'standard': 'Standard', 
                'classwise': 'Classwise',
-               'always_cluster': 'Clustered'}
+               'cluster_random': 'Clustered',}
 map_to_color = {'standard': 'gray', 
                'classwise': 'lightcoral',
-               'always_cluster': 'dodgerblue'}
+               'cluster_random': 'dodgerblue'}
 
 
 def remove_rare_classes(softmax_scores, labels, thresh = 150):
@@ -425,7 +425,8 @@ def average_results_across_seeds(folder, print_results=True, display_table=True,
         
     return df
 
-def plot_class_coverage_histogram(folder, desired_cov=None, vmin=.6, vmax=1, nbins=30, title=None):
+def plot_class_coverage_histogram(folder, desired_cov=None, vmin=.6, vmax=1, nbins=30, 
+                                  title=None, methods=['standard', 'classwise', 'always_cluster']):
     '''
     For each method, aggregate class coverages across all random seeds and then 
     plot density/histogram. This is equivalent to estimating a density for each
@@ -441,9 +442,6 @@ def plot_class_coverage_histogram(folder, desired_cov=None, vmin=.6, vmax=1, nbi
     sns.set_palette('pastel')
     sns.set_context('talk') # 'paper', 'talk', 'poster'
     
-    methods = ['standard', 
-               'classwise', 
-               'always_cluster']
     
     bin_edges = np.linspace(vmin,vmax,nbins+1)
     

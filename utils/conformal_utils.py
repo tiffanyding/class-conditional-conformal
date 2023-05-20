@@ -459,8 +459,9 @@ def compute_cluster_specific_qhats(cluster_assignments, cal_class_scores, cal_tr
     
 def clustered_conformal(totalcal_scores_all, totalcal_labels,
                         alpha,
+                        frac_clustering='auto', num_clusters='auto',
                         val_scores_all=None, val_labels=None,
-                        split='proportional'):
+                        split='random'):
     '''
     Use totalcal_scores and total_labels to compute conformal quantiles for each
     class using the clustered conformal procedure. Optionally evaluates 
@@ -488,8 +489,9 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
          on val_scores and val_labels.
          - split: How to split data between clustering step and calibration step. Options are
          'balanced' (sample n_clustering per class), 'proportional' (sample proportional to
-         distribution such that rarest class has n_clustering example), or 'doubledip' (don't
-         split and use all data for both steps
+         distribution such that rarest class has n_clustering example), 'doubledip' (don't
+         split and use all data for both steps, or 'random' (each example is assigned to
+         clustering step with some fixed probability) 
          
     Outputs:
         - qhats: num_classes-length array where qhats[i] = conformal quantial estimate for class i
@@ -541,31 +543,32 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
     num_classes = totalcal_scores_all.shape[1]
     totalcal_scores = get_true_class_conformal_score(totalcal_scores_all, totalcal_labels)
     
-    # 1) Apply heuristic to choose hyperparameters
-    cts_dict = Counter(totalcal_labels)
-    cts = [cts_dict.get(k, 0) for k in range(num_classes)]
-    n_min = min(cts)
-    n_thresh = get_quantile_threshold(alpha) 
-    n_min = max(n_min, n_thresh) # Classes with fewer than n_thresh examples will be excluded from clustering
-    num_remaining_classes = np.sum(np.array(list(cts)) >= n_min)
-    
-    
-#     # 1) Identify rare classes
-#     rare_classes = get_rare_classes(totalcal_labels, alpha)
-#     n_thresh = get_quantile_threshold(alpha) 
-#     print(f'Excluding {len(rare_classes)} rare classes (out of {num_classes}) from clustering')
-    
-#     # 2) Apply heuristic to choose hyperparameters
-#     num_remaining_classes = num_classes - len(rare_classes) 
-#     filtered_labels = totalcal_labels[~np.isin(totalcal_labels, rare_classes)]
-#     n_min = min(Counter(filtered_labels).values())
-#     n_min = max(n_min, n_thresh) # Classes with fewer than n_thresh examples will be excluded
+    # 1) Apply heuristic to choose hyperparameters if not prespecified
+    if frac_clustering == 'auto' and num_clusters == 'auto':
+        cts_dict = Counter(totalcal_labels)
+        cts = [cts_dict.get(k, 0) for k in range(num_classes)]
+        n_min = min(cts)
+        n_thresh = get_quantile_threshold(alpha) 
+        n_min = max(n_min, n_thresh) # Classes with fewer than n_thresh examples will be excluded from clustering
+        num_remaining_classes = np.sum(np.array(list(cts)) >= n_min)
 
-    n_clustering, num_clusters = get_clustering_parameters(num_remaining_classes, n_min)
-    print(f'n_clustering={n_clustering}, num_clusters={num_clusters}')
-    # Convert n_clustering to fraction relative to n_min
-    frac_clustering = n_clustering / n_min
-    
+
+    #     # 1) Identify rare classes
+    #     rare_classes = get_rare_classes(totalcal_labels, alpha)
+    #     n_thresh = get_quantile_threshold(alpha) 
+    #     print(f'Excluding {len(rare_classes)} rare classes (out of {num_classes}) from clustering')
+
+    #     # 2) Apply heuristic to choose hyperparameters
+    #     num_remaining_classes = num_classes - len(rare_classes) 
+    #     filtered_labels = totalcal_labels[~np.isin(totalcal_labels, rare_classes)]
+    #     n_min = min(Counter(filtered_labels).values())
+    #     n_min = max(n_min, n_thresh) # Classes with fewer than n_thresh examples will be excluded
+
+        n_clustering, num_clusters = get_clustering_parameters(num_remaining_classes, n_min)
+        print(f'n_clustering={n_clustering}, num_clusters={num_clusters}')
+        # Convert n_clustering to fraction relative to n_min
+        frac_clustering = n_clustering / n_min
+
         
     # 2a) Split data
     if split == 'proportional':
