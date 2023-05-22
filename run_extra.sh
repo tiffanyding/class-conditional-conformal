@@ -17,8 +17,8 @@
 # filename patterns here: https://slurm.schedmd.com/sbatch.html
 # %N is the hostname (if used, will create output(s) per node)
 # %j is jobid
-#SBATCH -o /home/tding/slurm_output/broader_scope_experiments_job=%j.out # STDOUT
-#SBATCH -e /home/tding/slurm_output/broader_scope_experiments_job=%j.err # STDERR
+#SBATCH -o /home/tding/slurm_output/exact_coverage_classwise_job=%j.out # STDOUT
+#SBATCH -e /home/tding/slurm_output/exact_coverage_classwise_job=%j.err # STDERR
 # if you want to get emails as your jobs run/fail
 ##SBATCH --mail-type=NONE # Mail events (NONE, BEGIN, END, FAIL, ALL)
 ##SBATCH --mail-user=tiffany_ding@eecs.berkeley.edu # Where to send mail
@@ -31,7 +31,7 @@ hostname | xargs -I{} echo "Node:" {}
 for calibration_sampling in 'random';
     do for dataset in 'imagenet' 'cifar-100' 'places365' 'inaturalist'; 
         do for n in 10 20 30 40 50 75 100 150; 
-            do python run_experiment.py $dataset $n -score_functions softmax APS RAPS -methods cluster_proportional cluster_random --calibration_sampling $calibration_sampling -seeds 0 1 2 3 4 5 6 7 8 9 & 
+            do python run_experiment.py $dataset $n -score_functions softmax APS RAPS -methods exact_coverage_classwise --calibration_sampling $calibration_sampling -seeds 0 1 2 3 4 5 6 7 8 9 &
         done; 
     done;
 done

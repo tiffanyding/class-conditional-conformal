@@ -23,6 +23,12 @@ if __name__ == "__main__":
 
     parser.add_argument('--calibration_sampling', type=str, default='random',
                     help='How to sample the calibration set. Options are "random" and "balanced"')
+    parser.add_argument('--frac_clustering', type=float, default=-1,
+                    help='For clustered conformal: the fraction of data used for clustering.'
+                       'If frac_clustering and num_clusters are both -1, then a heuristic will be used to choose these values.')
+    parser.add_argument('--num_clusters', type=int, default=-1,
+                    help='For clustered conformal: the number of clusters to request'
+                       'If frac_clustering and num_clusters are both -1, then a heuristic will be used to choose these values.')
     parser.add_argument('--alpha', type=float, default=0.1,
                     help='Desired coverage is 1-alpha')
     parser.add_argument('--save_folder', type=str, default='.cache/paper/varying_n',
@@ -30,7 +36,12 @@ if __name__ == "__main__":
 
     
     args = parser.parse_args()
-    
-    run_one_experiment(args.dataset, args.save_folder, args.alpha, 
-                       args.avg_num_per_class, args.score_functions, args.methods, args.seeds, 
-                       save_preds=False, calibration_sampling=args.calibration_sampling)
+    if args.frac_clustering != -1 and args.num_clusters != -1:
+        run_one_experiment(args.dataset, args.save_folder, args.alpha, 
+                           args.avg_num_per_class, args.score_functions, args.methods, args.seeds, 
+                           cluster_args={'frac_clustering': args.frac_clustering, 'num_clusters': args.num_clusters}, 
+                           save_preds=False, calibration_sampling=args.calibration_sampling)
+    else: # choose frac_clustering and num_clusters automatically 
+        run_one_experiment(args.dataset, args.save_folder, args.alpha, 
+                           args.avg_num_per_class, args.score_functions, args.methods, args.seeds, 
+                           save_preds=False, calibration_sampling=args.calibration_sampling)

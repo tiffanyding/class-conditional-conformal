@@ -162,7 +162,7 @@ def compute_qhat(class_scores, true_labels, alpha, plot_scores=False):
     # Identify score q_hat such that ~(1-alpha) fraction of scores are below qhat 
     #    Note: More precisely, it is (1-alpha) times a small correction factor
     n = len(true_labels)
-    q_hat = np.quantile(scores, np.ceil((n+1)*(1-alpha))/n)
+    q_hat = np.quantile(scores, np.ceil((n+1)*(1-alpha))/n, method='inverted_cdf')
     
     # Plot score distribution
     if plot_scores:
@@ -344,7 +344,7 @@ def compute_class_specific_qhats(cal_class_scores, cal_true_labels, num_classes,
                       f'so default q_hat value of {default_qhat} will be used')
                 q_hats[k] = default_qhat
             else:
-                q_hats[k] = np.quantile(scores, val)
+                q_hats[k] = np.quantile(scores, val, method='inverted_cdf')
                 
     if -1 in cal_true_labels:
         q_hats = np.concatenate((q_hats, [null_qhat]))
@@ -353,11 +353,6 @@ def compute_class_specific_qhats(cal_class_scores, cal_true_labels, num_classes,
     if regularize:
         N = num_classes
         n_k = np.maximum(class_cts, 1) # So that classes that never appear do not cause division by 0 issues. 
-#         S2 = np.sum((q_hats-default_qhat) ** 2)
-        
-        
-#         shrinkage_factor = 1 - (N-3)*alpha*(1-alpha)/(n_k * S2)
-#         shrinkage_factor = np.maximum(shrinkage_factor, 0) # Do not shrink past default_qhat
         shrinkage_factor = .03 * n_k # smaller = less shrinkage
         shrinkage_factor = np.minimum(shrinkage_factor, 1)
         print('SHRINKAGE FACTOR:', shrinkage_factor)  
@@ -459,8 +454,8 @@ def compute_cluster_specific_qhats(cluster_assignments, cal_class_scores, cal_tr
     
 def clustered_conformal(totalcal_scores_all, totalcal_labels,
                         alpha,
-                        frac_clustering='auto', num_clusters='auto',
                         val_scores_all=None, val_labels=None,
+                        frac_clustering='auto', num_clusters='auto',
                         split='random'):
     '''
     Use totalcal_scores and total_labels to compute conformal quantiles for each
@@ -601,7 +596,7 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
           ' and will be assigned to the null cluster')
     
     # 3) Run clustering
-    if num_classes - len(rare_classes) > 1 and num_clusters > 1:  
+    if num_classes - len(rare_classes) > num_clusters and num_clusters > 1:  
         # Filter out rare classes and re-index
         remaining_idx, filtered_labels, class_remapping = remap_classes(labels1, rare_classes)
         filtered_scores = scores1[remaining_idx]
@@ -645,126 +640,6 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
         return qhats
 
     
-# # Full Clustered Conformal pipeline for pre-specified n_clustering and num_clusters
-# def clustered_conformal(totalcal_scores_all, totalcal_labels,
-#                         alpha,
-#                         n_clustering, num_clusters,
-#                         val_scores_all=None, val_labels=None,
-#                         split='balanced'):
-#     '''
-#     Use totalcal_scores and total_labels to compute conformal quantiles for each
-#     class using the clustered conformal procedure. Optionally evaluates 
-#     performance on val_scores and val_labels
-    
-#     Inputs:
-#          - totalcal_scores: num_instances x num_classes array where 
-#            cal_class_scores[i,j] = score of class j for instance i
-#          - totalcal_labels: num_instances-length array of true class labels (0-indexed classes)
-#          - alpha: number between 0 and 1 that determines coverage level.
-#          Coverage level will be 1-alpha.
-#          - n_clustering: Number of points per class to use for clustering step. The remaining
-#          points are used for the conformal calibration step.
-#          - num_clusters: Number of clusters to group classes into
-#          - val_scores: num_val_instances x num_classes array, or None. If not None, 
-#          the class coverage gap and average set sizes will be computed on val_scores
-#          and val_labels.
-#          - val_labels: num_val_instances-length array of true class labels, or None. 
-#          If not None, the class coverage gap and average set sizes will be computed 
-#          on val_scores and val_labels.
-#          - split: How to split data between clustering step and calibration step. Options are
-#          'balanced' or 'proportional'
-         
-#     Outputs:
-#         - qhats: num_classes-length array where qhats[i] = conformal quantial estimate for class i
-#         - [Optionally, if val_scores and val_labels are not None] 
-#             - val_preds: clustered conformal predictions on val_scores
-#             - val_class_coverage_gap: Class coverage gap, compute on val_scores and val_labels
-#             - val_set_size_metrics: Dict containing set size metrics, compute on val_scores and val_labels
-#     '''
-    
-#     # Helper function
-#     def filter_out_rare_classes(embeddings, class_cts, alpha):
-#         thresh = get_quantile_threshold(alpha)
-#         class_remapping = {} # Old class index -> new class index (excluding classes that appear less than thresh times)
-#         new_idx = 0
-        
-#         filtered_embeddings = []
-#         for emb, ct, i in zip(embeddings, class_cts, range(len(class_cts))):
-#             if ct >= thresh:
-#                 filtered_embeddings.append(embeddings)
-#                 class_remapping[i] = new_idx
-#                 new_idx += 1
-                
-#         filtered_embeddings = np.array(filtered_embeddings)
-        
-#         print('Number of classes that are "rare":', i+1-new_idx)
-        
-#         return filtered_embeddings, class_remapping
-    
-    
-#     num_classes = totalcal_scores_all.shape[1]
-    
-#     # Default to Standard if n_clustering or num_clusters are 0
-#     if n_clustering == 0 or num_clusters == 0:
-#         print(f'Since one of n_clustering={n_clustering} and n_clustering={n_clustering} is 0,' 
-#               ' we are defaulting to standard conformal')
-#         standard_qhat = compute_qhat(totalcal_scores_all, totalcal_labels, alpha)
-#         standard_preds = create_prediction_sets(val_scores_all, standard_qhat)
-#         coverage_metrics, set_size_metrics = compute_all_metrics(val_labels, standard_preds, alpha)
-        
-#         return standard_qhat, standard_preds, coverage_metrics, set_size_metrics
-    
-#     else:
-    
-#         # 0) Split data 
-#         scores1_all, labels1, scores2_all, labels2 = split_X_and_y(totalcal_scores_all, 
-#                                                                        totalcal_labels, 
-#                                                                        n_clustering, 
-#                                                                        num_classes=num_classes, 
-#                                                                        seed=0,
-#                                                                        split=split) # Balanced or stratified sampling               
-
-#         # 1) Compute embedding for each class and get class counts
-#         embeddings, class_cts = embed_all_classes(scores1_all, labels1, q=[0.5, 0.6, 0.7, 0.8, 0.9], return_cts=True)
-
-#         # Filter out rare classes 
-#         filtered_embeddings, class_remapping = filter_out_rare_classes(embeddings, class_cts, alpha)
-
-#         # 2) Cluster classes, with bailout (a.k.a., rare classes are assigned to cluster -1)
-#         if num_clusters > 1:
-#             kmeans = KMeans(n_clusters=int(num_clusters), random_state=0, n_init=10).fit(embeddings, sample_weight=np.sqrt(class_cts))
-#             nonrare_class_cluster_assignments = kmeans.labels_  
-
-#             # Print cluster sizes
-#             print(f'Cluster sizes:', [x[1] for x in Counter(nonrare_class_cluster_assignments).most_common()])
-
-#             # Remap cluster assignments to original classes. Any class not included in kmeans clustering is a rare 
-#             # class, so we will assign it to class "-1"
-#             cluster_assignments = -np.ones((num_classes,), dtype=int)
-#             for cls, remapped_cls in class_remapping.items():
-#                 cluster_assignments[cls] = nonrare_class_cluster_assignments[remapped_cls]
-#         else: 
-#             cluster_assignments = -np.ones((num_classes,), dtype=int)
-#             print('Skipped clustering because the number of clusters requested was <= 1')
-
-#         # 3) Compute qhats for each cluster
-#         cal_scores_all = scores2_all
-#         cal_labels = labels2
-#         qhats = compute_cluster_specific_qhats(cluster_assignments, 
-#                    cal_scores_all, cal_labels, 
-#                    alpha=alpha, 
-#                    default_qhat='standard')
-
-#         # 4) [Optionally] Apply to val set. Evaluate class coverage gap and set size 
-#         if (val_scores_all is not None) and (val_labels is not None):
-#             preds = create_cb_prediction_sets(val_scores_all, qhats)
-#             class_cov_metrics, set_size_metrics = compute_all_metrics(val_labels, preds, alpha,
-#                                                                       cluster_assignments=cluster_assignments)
-
-#             return qhats, preds, class_cov_metrics, set_size_metrics
-#         else:
-#             return qhats
-    
 def get_clustering_parameters(num_classes, n_totalcal):
     '''
     Returns a guess of good values for num_clusters and n_clustering based solely 
@@ -788,94 +663,99 @@ def get_clustering_parameters(num_classes, n_totalcal):
     
     return n_clustering, num_clusters
 
-# def automatic_clustered_conformal(totalcal_scores_all, totalcal_labels,
-#                         alpha,
-#                         val_scores_all, val_labels,
-#                         cluster='smart',
-#                         split='balanced'):
-#     '''
-#     Use totalcal_scores_all and total_labels to compute conformal quantiles for each
-#     class using the clustered conformal procedure. Evaluates 
-#     performance on val_scores and val_labels
-    
-#     Inputs:
-#          - totalcal_scores_all: num_instances x num_classes array where 
-#            cal_class_scores[i,j] = score of class j for instance i
-#          - totalcal_labels: num_instances-length array of true class labels (0-indexed classes)
-#          - alpha: number between 0 and 1 that determines coverage level.
-#          Coverage level will be 1-alpha.
-#          - val_scores: num_val_instances x num_classes array. Class coverage gap and 
-#          average set sizes will be computed on val_scores
-#          and val_labels.
-#          - val_labels: num_val_instances-length array of true class labels. Class coverage 
-#          gap and average set sizes will be computed on val_scores 
-#          and val_labels.
-#          - cluster: 'smart' or 'always'. In both cases, the clustering settings (n_clustering 
-#          and num_clusters) are chosen using get_clustering_parameters(). When cluster=='smart',
-#          we perform a hypothesis test to determine if we should cluster or not 
-#          cluster using the chosen settings. When cluster=='always' is chosen, we always cluster
-#          using the chosen settings.
-#          - split: How to split data between clustering step and calibration step. Options are
-#          'balanced' or 'proportional'
-#     Outputs:
-#         - qhats: num_classes-length array where qhats[i] = conformal quantile estimate for class i
-#         - val_preds: clustered conformal predictions on val_scores
-#         - val_class_coverage_gap: Class coverage gap, compute on val_scores and val_labels
-#         - val_set_size_metrics: Dict containing set size metrics, compute on val_scores and val_labels
-#     '''
-    
-#     num_classes = totalcal_scores_all.shape[1]
-    
-#     # Count is based on rarest class
-#     cts = Counter(totalcal_labels).values()
-#     if len(cts) < num_classes:
-#         n_totalcal = 0 # There are classes that don't appear at all
-#     else:
-#         n_totalcal = min(cts)
-    
-#     # Heuristically choose clustering parameters
-#     n_clustering, num_clusters = get_clustering_parameters(num_classes, n_totalcal)
-#     print(f'Heuristic chose n_clustering={n_clustering}, num_clusters={num_clusters}')
-    
-#     # If applicable, perform hypothesis test
-#     if cluster == 'smart':
-#         pval_threshold = .01
-#         # Split data between clustering and calibration
-#         scores1_all, labels1, _, _ = split_X_and_y(totalcal_scores_all, 
-#                                                                totalcal_labels, 
-#                                                                n_clustering, 
-#                                                                num_classes=num_classes, 
-#                                                                seed=0)
-#         pval = test_one_cluster_null(scores1_all, labels1, num_classes, num_clusters, 
-#                                     num_trials=100, seed=0, print_results=False)
-        
-#         if pval < pval_threshold: 
-#             print(f'p={pval} for one cluster null hypothesis, so running Clustered Conformal')
-#             # Run clustered conformal and return prediction sets
-#             qhats, preds, coverage_metrics, set_size_metrics = clustered_conformal(totalcal_scores_all, totalcal_labels,
-#                                                                         alpha,
-#                                                                         n_clustering, num_clusters,
-#                                                                         val_scores_all=val_scores_all, val_labels=val_labels)
-#         else:
-#             print(f'p={pval} for one cluster null hypothesis, so running Standard Conformal')
-#             # Run Standard Conformal and return prediction sets 
-#             standard_qhat = compute_qhat(totalcal_scores_all, totalcal_labels, alpha=alpha)
-#             preds = create_prediction_sets(val_scores_all, standard_qhat)
+#========================================
+#   Conformal variant: exact coverage via randomization 
+#========================================
+# Currently implemented for classwise only, but can also be used for standard conformal or clustered conformal
 
-#             coverage_metrics, set_size_metrics = compute_all_metrics(val_labels, preds, alpha)
-#             qhats = standard_qhat * np.ones((num_classes,))
-#     elif cluster == 'always':
-#         # Run clustered conformal and return prediction sets
-#         qhats, preds, coverage_metrics, set_size_metrics = clustered_conformal(totalcal_scores_all, totalcal_labels,
-#                                                                     alpha,
-#                                                                     n_clustering, num_clusters,
-#                                                                     val_scores_all=val_scores_all, val_labels=val_labels)
-#     else:
-#         raise NotImplementedError('Valid options for cluster are "smart" and "always"')
+def get_exact_coverage_conformal_params(scores, alpha, default_qhat=np.inf):
+    '''
+    Compute the quantities necessary for performing conformal prediction with exact coverage
     
-#     return qhats, preds, coverage_metrics, set_size_metrics
-   
-            
+    Inputs:
+        score: length-n array of conformal scores
+        alpha: float between 0 and 1 denoting the desired coverage level
+        default_qhat = value used when n is too small for computing the relevant quantiles
+    Outputs:
+        q_a = The smallest score that is larger than (n+1) * (1-alpha) of the other scores (= normal conformal qhat)
+        q_b The smallest score that is larger than (n+1) * (1-alpha) - 1 of the other scores
+        gamma: value between 0 and 1 such that gamma * q_a + (1-gamma)*g_b = 1-alpha
+    '''
+    n = len(scores)
+    
+    if n == 0:
+        return np.inf, np.inf, 1
+    
+    val_a = np.ceil((n+1)*(1-alpha)) / n
+    if val_a > 1:
+        q_a = default_qhat
+    else:
+        q_a = np.quantile(scores, val_a, method='inverted_cdf')
+        
+    val_b = (np.ceil((n+1)*(1-alpha)-1)) / n
+    if val_b > 1:
+        q_b = default_qhat
+        
+    else:
+        q_b = np.quantile(scores, val_b, method='inverted_cdf') 
+        
+    if val_a > 1 and val_b > 1:
+        gamma = 1 # Any value would work, since q_a and q_b are both equal to default_qhat
+    else:
+        overcov = np.ceil((n+1)*(1-alpha))/(n+1) - (1-alpha) # How much coverage using q_a will exceed 1 - alpha
+        undercov = (1-alpha) - (np.ceil((n+1)*(1-alpha))-1)/(n+1)  #  How much coverage using q_b will undershoot 1 - alpha
+#         print(f'overcov: {overcov:.3f}, undercov: {undercov:.3f}')
+        gamma = overcov / (undercov + overcov)
+
+    return q_a, q_b, gamma
+
+def construct_exact_coverage_classwise_sets(q_as, q_bs, gammas, class_scores):
+    # In non-randomized conformal, the qhat vector is fixed. But now, it will vary for each validation example
+    
+    
+    class_scores = np.array(class_scores)
+    set_preds = []
+    num_samples = len(class_scores)
+    for i in range(num_samples):
+        try:
+            Bs = np.random.rand(len(gammas)) < gammas # Bernoulli random vars
+#             val1 = np.multiply(q_as, Bs, where=(~(np.isinf(q_as) & (Bs==0)))) # Define 0 * inf = 0
+#             val2 = np.multiply(q_bs, 1-Bs, where=(~(np.isinf(q_as) & ((1-Bs)==0))))
+#             q_hats = val1 + val2
+            q_hats = np.where(Bs, q_as, q_bs)
+            set_preds.append(np.where(class_scores[i,:] <= q_hats)[0]) 
+        except:
+            pdb.set_trace()
+        
+    return set_preds
+
+def exact_coverage_classwise_conformal_pipeline(scores_all, labels, num_classes, alpha, default_qhat=np.inf, 
+                                       val_scores_all=None, val_labels=None):
+    num_classes = scores_all.shape[1]
+    
+    q_as = np.zeros((num_classes,))   
+    q_bs = np.zeros((num_classes,)) 
+    gammas = np.zeros((num_classes,)) 
+    for k in range(num_classes):
+        # Only select data for which k is true class
+        idx = (labels == k)
+        scores = scores_all[idx, k]
+        
+        q_a, q_b, gamma = get_exact_coverage_conformal_params(scores, alpha, default_qhat=np.inf)
+        q_as[k] = q_a
+        q_bs[k] = q_b
+        gammas[k] = gamma
+        
+    exact_cov_params = {'q_a': q_as, 'q_b': q_bs, 'gamma': gammas}
+    
+    # Optionally, compute coverage metrics on validation data
+    if (val_scores_all is not None) and (val_labels is not None):
+        preds = construct_exact_coverage_classwise_sets(q_as, q_bs, gammas, val_scores_all)
+        class_cov_metrics, set_size_metrics = compute_all_metrics(val_labels, preds, alpha)
+
+        return exact_cov_params, preds, class_cov_metrics, set_size_metrics
+    else:
+        return exact_cov_params
         
 #========================================
 #   Adaptive Prediction Sets (APS)
