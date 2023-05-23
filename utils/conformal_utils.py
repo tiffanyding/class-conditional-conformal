@@ -705,7 +705,7 @@ def get_exact_coverage_conformal_params(scores, alpha, default_qhat=np.inf):
         overcov = np.ceil((n+1)*(1-alpha))/(n+1) - (1-alpha) # How much coverage using q_a will exceed 1 - alpha
         undercov = (1-alpha) - (np.ceil((n+1)*(1-alpha))-1)/(n+1)  #  How much coverage using q_b will undershoot 1 - alpha
 #         print(f'overcov: {overcov:.3f}, undercov: {undercov:.3f}')
-        gamma = overcov / (undercov + overcov)
+        gamma = undercov / (undercov + overcov)
 
     return q_a, q_b, gamma
 

@@ -26,7 +26,7 @@ def remove_rare_classes(softmax_scores, labels, thresh = 150):
     '''
     Filter out classes with fewer than 150 examples
     
-    Note: Make sure to raw softmax scores instead of 1-softmax in order for
+    Note: Make sure to use raw softmax scores instead of 1-softmax in order for
     normalization to work correctly
     '''
     classes, cts = np.unique(labels, return_counts=True)
@@ -376,11 +376,14 @@ def average_results_across_seeds(folder, print_results=True, display_table=True,
             results = pickle.load(f)
                         
         for method in methods:
-            metrics[method]['class_cov_gap'].append(results[method][2]['mean_class_cov_gap'])
-            metrics[method]['avg_set_size'].append(results[method][3]['mean'])
-            metrics[method]['max_class_cov_gap'].append(results[method][2]['max_gap'])
-            metrics[method]['marginal_cov'].append(results[method][2]['marginal_cov'])
-            metrics[method]['very_undercovered'].append(results[method][2]['very_undercovered'])
+            try:
+                metrics[method]['class_cov_gap'].append(results[method][2]['mean_class_cov_gap'])
+                metrics[method]['avg_set_size'].append(results[method][3]['mean'])
+                metrics[method]['max_class_cov_gap'].append(results[method][2]['max_gap'])
+                metrics[method]['marginal_cov'].append(results[method][2]['marginal_cov'])
+                metrics[method]['very_undercovered'].append(results[method][2]['very_undercovered'])
+            except:
+                print(f'Missing {method} in {pth}')
             
 #     # ADDED
 #     print(folder)
