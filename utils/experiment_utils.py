@@ -66,17 +66,17 @@ def load_dataset(dataset, remove_rare_cls=False):
         softmax_path = '/home/tding/data/finetuned_imagenet/imagenet_train_subset_softmax.npy'
         labels_path = '/home/tding/data/finetuned_imagenet/imagenet_train_subset_labels.npy'
     elif dataset == 'cifar-100':
-        softmax_path = "../class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-fracval=0.5-valsoftmax_frac=0.5.npy"
-        labels_path = "../class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-fracval=0.5-vallabels_frac=0.5.npy"
-#         softmax_path = "../class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-fracval=0.7-valsoftmax_frac=0.7.npy"
-#         labels_path = "../class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-fracval=0.7-vallabels_frac=0.7.npy"
+        softmax_path = "/home/tding/code/class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-fracval=0.5-valsoftmax_frac=0.5.npy"
+        labels_path = "/home/tding/code/class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-fracval=0.5-vallabels_frac=0.5.npy"
+#         softmax_path = "/home/tding/code/class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-fracval=0.7-valsoftmax_frac=0.7.npy"
+#         labels_path = "/home/tding/code/class-conditional-conformal-datasets/notebooks/.cache/best-cifar100-model-fracval=0.7-vallabels_frac=0.7.npy"
     elif dataset == 'places365':
-        softmax_path = '../class-conditional-conformal-datasets/notebooks/.cache/best-Places365-model-valsoftmax_frac=0.1.npy'
-        labels_path = '../class-conditional-conformal-datasets/notebooks/.cache/best-Places365-model-vallabels_frac=0.1.npy'
+        softmax_path = '/home/tding/code/class-conditional-conformal-datasets/notebooks/.cache/best-Places365-model-valsoftmax_frac=0.1.npy'
+        labels_path = '/home/tding/code/class-conditional-conformal-datasets/notebooks/.cache/best-Places365-model-vallabels_frac=0.1.npy'
     elif dataset == 'inaturalist':
         # 'family' level
-        softmax_path = '../class-conditional-conformal-datasets/notebooks/.cache/best-iNaturalist-model-valsoftmax_frac=0.5.npy'
-        labels_path = '../class-conditional-conformal-datasets/notebooks/.cache/best-iNaturalist-model-vallabels_frac=0.5.npy'
+        softmax_path = '/home/tding/code/class-conditional-conformal-datasets/notebooks/.cache/best-iNaturalist-model-valsoftmax_frac=0.5.npy'
+        labels_path = '/home/tding/code/class-conditional-conformal-datasets/notebooks/.cache/best-iNaturalist-model-vallabels_frac=0.5.npy'
     
 #         # full species level (6414 classes before filtering)
 #         softmax_path = '../class-conditional-conformal-datasets/notebooks/.cache/archived/best-iNaturalist-model-valsoftmax_frac=0.5.npy'
@@ -248,96 +248,6 @@ def run_one_experiment(dataset, save_folder, alpha, n_totalcal, score_function_l
             with open(save_to,'wb') as f:
                 pickle.dump(all_results, f)
                 print(f'Saved results to {save_to}')
-
-# def run_experiment(softmax_scores, labels,
-#                   save_folder,
-#                   alpha=.1,
-#                   n_totalcal_list=[10, 30],
-#                   score_function_list = ['softmax', 'APS'],
-#                   methods = ['standard', 'classwise', 'always_cluster'] # , 'regularized_classwise']
-#                   seeds = [0,1,2,3,4],
-#                   save_preds=False):
-#     '''
-#     If save_preds is True, the val prediction sets are included in the saved outputs
-#     '''
-    
-#     num_classes = softmax_scores.shape[1]
-    
-#     for n_totalcal in n_totalcal_list:
-#         for score_function in score_function_list:
-#             curr_folder = os.path.join(save_folder, f'n_totalcal={n_totalcal}/score={score_function}')
-#             os.makedirs(curr_folder, exist_ok=True)
-            
-#             print(f'====== score_function={score_function} ======')
-    
-#             print('Computing conformal score...')
-#             if score_function == 'softmax':
-#                 scores_all = 1 - softmax_scores
-#             elif score_function == 'APS':
-#                 scores_all = get_APS_scores_all(softmax_scores, randomize=True)
-#             elif score_function == 'RAPS': 
-#                 # RAPS hyperparameters (currently using ImageNet defaults)
-#                 lmbda = .01 
-#                 kreg = 5
-
-#                 scores_all = get_RAPS_scores_all(softmax_scores, lmbda, kreg, randomize=True)
-#             else:
-#                 raise Exception('Undefined score function')
-
-#             for seed in seeds:
-#                 print(f'\nseed={seed}')
-#                 save_to = os.path.join(curr_folder, f'seed={seed}_allresults.pkl')
-#                 if os.path.exists(save_to):
-#                     with open(save_to,'rb') as f:
-#                         all_results = pickle.load(f)
-#                         print('Loaded existing results file containing results for', all_results.keys())
-#                 else:
-#                     all_results = {} # Each value is (qhat(s), preds, coverage_metrics, set_size_metrics)
-                
-#                 # Split data
-#                 totalcal_scores_all, totalcal_labels, val_scores_all, val_labels = split_X_and_y(scores_all, labels, n_totalcal, num_classes=num_classes, seed=seed)
-                
-#                 for method in methods:
-                    
-                    
-#                     if method == 'standard':
-#                         # Standard conformal
-#                         standard_qhat = compute_qhat(totalcal_scores_all, totalcal_labels, alpha=alpha)
-#                         standard_preds = create_prediction_sets(val_scores_all, standard_qhat)
-#                         coverage_metrics, set_size_metrics = compute_all_metrics(val_labels, standard_preds, alpha)
-#                         all_results['standard'] = (standard_qhat, standard_preds, coverage_metrics, set_size_metrics)
-                        
-#                     elif method == 'classwise':
-#                         # Classwise conformal
-#                         classwise_qhats = compute_class_specific_qhats(totalcal_scores_all, 
-#                                                                        totalcal_labels, alpha=alpha, default_qhat=np.inf)
-#                         classwise_preds = create_cb_prediction_sets(val_scores_all, classwise_qhats)
-
-#                         coverage_metrics, set_size_metrics = compute_all_metrics(val_labels, classwise_preds, alpha)
-#                         all_results['classwise'] = (classwise_qhats, classwise_preds, coverage_metrics, set_size_metrics)
-                        
-#                     elif method == 'always_cluster':
-#                         # Clustered conformal
-#                         all_results['always'] = automatic_clustered_conformal(totalcal_scores_all, totalcal_labels,
-#                                                                                         alpha,
-#                                                                                 val_scores_all, val_labels, 
-#                                                                                 cluster='always')
-
-#                     elif method == 'regularized_classwise':
-#                         # Empirical-Bayes-inspired regularized classwise conformal (shrink class qhats to standard)
-#                         # TODO
-#                         pass
-
-#                 # Optionally remove predictions from saved output to reduce memory usage
-#                 if not save_preds:
-#                     for m in all_results.keys():
-#                         all_results[m] = (all_results[m][0], None, all_results[m][2], all_results[m][3])
-                
-#                 # Save results 
-#                 with open(save_to,'wb') as f:
-#                     pickle.dump(all_results, f)
-#                     print(f'Saved results to {save_to}')
-                    
                     
 def initialize_metrics_dict(methods):
     
@@ -455,9 +365,9 @@ def initialize_dict(metrics, methods, suffixes=['mean', 'se']):
 
 def get_metric_df(dataset, cal_sampling, metric, 
                   score_function,
-                  method_list = ['standard', 'classwise', 'cluster_proportional'],
+                  method_list = ['standard', 'classwise', 'cluster_random'],
                   n_list = [10, 20, 30, 40, 50, 75, 100, 150],
-                  save_folder='.cache/paper/varying_n'):
+                  save_folder='../.cache/paper/varying_n'): # May have to update this path
     '''
     Similar to average_results_across_seeds
     '''
@@ -581,4 +491,61 @@ def plot_class_coverage_histogram(folder, desired_cov=None, vmin=.6, vmax=1, nbi
 #     plt.ylabel('Number of classes')
 #     plt.show()
 #     plt.legend()
+
+# For square-root scaling in plots
+import matplotlib.scale as mscale
+import matplotlib.pyplot as plt
+import matplotlib.transforms as mtransforms
+import matplotlib.ticker as ticker
+import numpy as np
+
+class SquareRootScale(mscale.ScaleBase):
+    """
+    ScaleBase class for generating square root scale.
+    """
+ 
+    name = 'squareroot'
+ 
+    def __init__(self, axis, **kwargs):
+        # note in older versions of matplotlib (<3.1), this worked fine.
+        # mscale.ScaleBase.__init__(self)
+
+        # In newer versions (>=3.1), you also need to pass in `axis` as an arg
+        mscale.ScaleBase.__init__(self, axis)
+ 
+    def set_default_locators_and_formatters(self, axis):
+        axis.set_major_locator(ticker.AutoLocator())
+        axis.set_major_formatter(ticker.ScalarFormatter())
+        axis.set_minor_locator(ticker.NullLocator())
+        axis.set_minor_formatter(ticker.NullFormatter())
+ 
+    def limit_range_for_scale(self, vmin, vmax, minpos):
+        return  max(0., vmin), vmax
+ 
+    class SquareRootTransform(mtransforms.Transform):
+        input_dims = 1
+        output_dims = 1
+        is_separable = True
+ 
+        def transform_non_affine(self, a): 
+            return np.array(a)**0.5
+ 
+        def inverted(self):
+            return SquareRootScale.InvertedSquareRootTransform()
+ 
+    class InvertedSquareRootTransform(mtransforms.Transform):
+        input_dims = 1
+        output_dims = 1
+        is_separable = True
+ 
+        def transform(self, a):
+            return np.array(a)**2
+ 
+        def inverted(self):
+            return SquareRootScale.SquareRootTransform()
+ 
+    def get_transform(self):
+        return self.SquareRootTransform()
+ 
+mscale.register_scale(SquareRootScale)
     

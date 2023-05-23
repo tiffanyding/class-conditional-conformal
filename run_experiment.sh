@@ -5,7 +5,7 @@
 # the SBATCH directives must appear before any executable
 # line in this script
 
-#SBATCH -n 64 # request CPUs
+#SBATCH -n 32 # request CPUs
 #SBATCH -t 0-48:00 # time requested (D-HH:MM)
 # slurm will cd to this directory before running the script
 # you can also just run sbatch submit.sh from the directory
@@ -19,9 +19,6 @@
 # %j is jobid
 #SBATCH -o /home/tding/slurm_output/broader_scope_experiments_job=%j.out # STDOUT
 #SBATCH -e /home/tding/slurm_output/broader_scope_experiments_job=%j.err # STDERR
-# if you want to get emails as your jobs run/fail
-##SBATCH --mail-type=NONE # Mail events (NONE, BEGIN, END, FAIL, ALL)
-##SBATCH --mail-user=tiffany_ding@eecs.berkeley.edu # Where to send mail
 #seff $SLURM_JOBID
 # print some info for context
 pwd | xargs -I{} echo "Current directory:" {}
@@ -35,8 +32,6 @@ for calibration_sampling in 'random' 'balanced';
         done; 
     done;
 done
-
-# for i in `find ./configs -name '*.yaml'` ; do python base_test.py $i & done
 
 
 # Run a single experiment
