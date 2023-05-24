@@ -192,7 +192,7 @@ def standard_conformal_pipeline(totalcal_scores_all, totalcal_labels, val_scores
     return standard_qhat, standard_preds, coverage_metrics, set_size_metrics
 
 #========================================
-#   Class-wise conformal inference and regularized class-wise
+#   Classwise conformal inference and regularized classwise
 #========================================
 
 # Additive version
@@ -546,18 +546,6 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
         n_thresh = get_quantile_threshold(alpha) 
         n_min = max(n_min, n_thresh) # Classes with fewer than n_thresh examples will be excluded from clustering
         num_remaining_classes = np.sum(np.array(list(cts)) >= n_min)
-
-
-    #     # 1) Identify rare classes
-    #     rare_classes = get_rare_classes(totalcal_labels, alpha)
-    #     n_thresh = get_quantile_threshold(alpha) 
-    #     print(f'Excluding {len(rare_classes)} rare classes (out of {num_classes}) from clustering')
-
-    #     # 2) Apply heuristic to choose hyperparameters
-    #     num_remaining_classes = num_classes - len(rare_classes) 
-    #     filtered_labels = totalcal_labels[~np.isin(totalcal_labels, rare_classes)]
-    #     n_min = min(Counter(filtered_labels).values())
-    #     n_min = max(n_min, n_thresh) # Classes with fewer than n_thresh examples will be excluded
 
         n_clustering, num_clusters = get_clustering_parameters(num_remaining_classes, n_min)
         print(f'n_clustering={n_clustering}, num_clusters={num_clusters}')
