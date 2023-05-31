@@ -9,7 +9,8 @@ Citation:
 ```
 @article{ding2021class,
   title={Class-Conditional Conformal Prediction with Many Classes},
-  author={Ding, Tiffany and Angelopoulos, Anastasios N and Bates, Stephen and Jordan, Michael I and Tibshirani, Ryan J},
+  author={Ding, Tiffany and Angelopoulos, Anastasios N and Bates, 
+          Stephen and Jordan, Michael I and Tibshirani, Ryan J},
   journal={TODO},
   year={2023}
 }
@@ -44,16 +45,16 @@ which will create a folder called `data/` and download the data described in the
 
 ## Data description
 
-`imagenet` (4.62 GB): `(115301, 1000)` array of softmax scores and `(115301,)` array of labels
-`cifar-100` (0.01 GB): `(30000, 100)` array of softmax scores and `(30000,)` array of labels
-`places365` (0.54 GB): `(183996, 365)` array of softmax scores and `(183996,)` array of labels
-`inaturalist` (6.72 GB): `(1324900, 633)` array of softmax scores and `(1324900,)` array of labels
+1. `imagenet` (4.62 GB): `(115301, 1000)` array of softmax scores and `(115301,)` array of labels
+1. `cifar-100` (0.01 GB): `(30000, 100)` array of softmax scores and `(30000,)` array of labels
+1. `places365` (0.54 GB): `(183996, 365)` array of softmax scores and `(183996,)` array of labels
+1. `inaturalist` (6.72 GB): `(1324900, 633)` array of softmax scores and `(1324900,)` array of labels
 
-The code for training models on the raw datasets to produce the softmax scores is located in `generate_scores/`.
+The code for training models on the raw datasets to produce the softmax scores is located in `generate_scores/`
 
 ## Running Clustered Conformal
 
-See `example.ipynb` for a demonstration.  
+See `example.ipynb` for an example of how to run clustered conformal prediction. 
 
 ## Reproducing our experiments
 
