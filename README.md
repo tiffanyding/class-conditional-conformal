@@ -1,15 +1,61 @@
-## Description of code organization
-* `notebooks/` contains Jupyter notebooks for producing the figures and metrics from our paper. 
-* `utils/` contains most the bulk of our code base. In particular, `utils/conformal_utils.py` contains implementations of standard, classwise, and clustered conformal (our proposed method). 
+
+<!-- TODOs:
+[ ] rewrite model training
+[ ] Run notebooks using clean environment: or open in colab  -->
+
+This is the code release accompanying the paper [TODO: add arXiv link]
+
+Citation: 
+```
+@article{ding2021class,
+  title={Class-Conditional Conformal Prediction with Many Classes},
+  author={Ding, Tiffany and Angelopoulos, Anastasios N and Bates, Stephen and Jordan, Michael I and Tibshirani, Ryan J},
+  journal={TODO},
+  year={2023}
+}
+```
 
 
-## To reproduce our experimental results
-1. First, generate the softmax scores for each dataset. This requires obtaining and preprocessing the data, training a model, then applying the model to held out validation data. The code to do this is located in separate repositories. 
-* For ImageNet, see my fork of `SimCLRv2-Pytorch` and follow the instructions in the first section of the README.
-* For CIFAR-100, Places365, and iNaturalist, see `class-conditional-conformal-datasets` and follow the instructions in the README.
+## Setup 
 
-1. Update the file paths in the `load_dataset()` function in `experiment_utils.py` to point to the locations of the softmax scores and labels produced in the previous step. 
+First, create a virtual environment and install the necessary packages by running
 
-1. Run `sh run_experiment.sh` to generate results files.
+```
+conda create --name env
+conda activate env
+pip install -r requirements.txt
+```
 
-1. Run the notebooks in `notebooks/` (update file paths if necessary).
+To make the environment accessible from Jupyter notebooks, run
+
+```
+ipython kernel install --user --name=conformal_env
+```
+
+This adds a kernel called `conformal_env` to your list of Jupyter kernels.
+
+Download the datasets by running
+
+```
+sh download_data.sh
+```
+
+which will create a folder called `data/` and download the data described in the following section. 
+
+## Data description
+
+`imagenet` (4.62 GB): `(115301, 1000)` array of softmax scores and `(115301,)` array of labels
+`cifar-100` (0.01 GB): `(30000, 100)` array of softmax scores and `(30000,)` array of labels
+`places365` (0.54 GB): `(183996, 365)` array of softmax scores and `(183996,)` array of labels
+`inaturalist` (6.72 GB): `(1324900, 633)` array of softmax scores and `(1324900,)` array of labels
+
+The code for training models on the raw datasets to produce the softmax scores is located in `generate_scores/`.
+
+## Running Clustered Conformal
+
+See `example.ipynb` for a demonstration.  
+
+## Reproducing our experiments
+
+Run `sh run_experiments.sh` to run our main set of experiments. Run `sh run_heatmap_experiments.sh` for experiments that test the sensitivity of clustered conformal to the hyperparameter values. To view the main results, run `jupyter` from Terminal, then run the notebooks in the `notebooks/` directory.
+

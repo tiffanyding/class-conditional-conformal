@@ -31,7 +31,7 @@ hostname | xargs -I{} echo "Node:" {}
 for calibration_sampling in 'random';
     do for dataset in 'imagenet' 'cifar-100' 'places365' 'inaturalist'; 
         do for n in 10 20 30 40 50 75 100 150; 
-            do python run_experiment.py $dataset $n -score_functions softmax APS RAPS -methods exact_coverage_classwise --calibration_sampling $calibration_sampling -seeds 0 1 2 3 4 5 6 7 8 9 &
+            do python run_experiment.py $dataset $n -score_functions softmax APS RAPS -methods exact_coverage_cluster --calibration_sampling $calibration_sampling -seeds 0 1 2 3 4 5 6 7 8 9 &
         done; 
     done;
 done

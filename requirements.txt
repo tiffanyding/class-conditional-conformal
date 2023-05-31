@@ -1,0 +1,11 @@
+gdown # for downloading Google Drive files
+joblib
+pandas
+matplotlib
+numpy
+scikit-learn
+seaborn
+tensorflow
+torch
+torchvision
+tqdm
