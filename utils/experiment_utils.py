@@ -251,7 +251,7 @@ def initialize_metrics_dict(methods):
     return metrics
 
 
-def average_results_across_seeds(folder, print_results=True, display_table=True, 
+def average_results_across_seeds(folder, print_results=True, display_table=True, show_seed_ct=False, 
                                  methods=['standard', 'classwise', 'cluster_balanced'],
                                  max_seeds=np.inf):
     '''
@@ -262,8 +262,8 @@ def average_results_across_seeds(folder, print_results=True, display_table=True,
     
     file_names = sorted(glob.glob(os.path.join(folder, '*.pkl')))
     num_seeds = len(file_names)
-#     if display_table:
-    print('Number of seeds found:', num_seeds)
+    if show_seed_ct:
+        print('Number of seeds found:', num_seeds)
     if max_seeds < np.inf and num_seeds > max_seeds:
         print(f'Only using {max_seeds} seeds')
         file_names = file_names[:max_seeds]
@@ -355,6 +355,7 @@ def get_metric_df(dataset, cal_sampling, metric,
                   score_function,
                   method_list = ['standard', 'classwise', 'cluster_random'],
                   n_list = [10, 20, 30, 40, 50, 75, 100, 150],
+                  show_seed_ct=False,
                   save_folder='../.cache/paper/varying_n'): # May have to update this path
     '''
     Similar to average_results_across_seeds
@@ -367,7 +368,9 @@ def get_metric_df(dataset, cal_sampling, metric,
         curr_folder = f'{save_folder}/{dataset}/{cal_sampling}_calset/n_totalcal={n_totalcal}/score={score_function}'
         print(curr_folder)
 
-        df = average_results_across_seeds(curr_folder, print_results=False, display_table=False, methods=method_list, max_seeds=10)
+        df = average_results_across_seeds(curr_folder, print_results=False, 
+                                          display_table=False, methods=method_list, max_seeds=10,
+                                          show_seed_ct=show_seed_ct)
 
         for method in method_list:
 

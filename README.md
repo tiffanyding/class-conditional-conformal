@@ -30,7 +30,7 @@ pip install -r requirements.txt
 To make the environment accessible from Jupyter notebooks, run
 
 ```
-ipython kernel install --user --name=conformal_env
+ipython3 kernel install --user --name=conformal_env
 ```
 
 This adds a kernel called `conformal_env` to your list of Jupyter kernels.
@@ -58,5 +58,5 @@ See `example.ipynb` for an example of how to run clustered conformal prediction.
 
 ## Reproducing our experiments
 
-Run `sh run_experiments.sh` to run our main set of experiments. Run `sh run_heatmap_experiments.sh` for experiments that test the sensitivity of clustered conformal to the hyperparameter values. To view the main results, run `jupyter` from Terminal, then run the notebooks in the `notebooks/` directory.
+Run `sh run_experiments.sh` to run our main set of experiments. Run `sh run_heatmap_experiments.sh` for experiments that test the sensitivity of clustered conformal to the hyperparameter values. To view the main results, run `jupyter notebook` from Terminal, then run the notebooks in the `notebooks/` directory.
 

@@ -1,5 +1,7 @@
 gdown # for downloading Google Drive files
+ipykernel
 joblib
+jupyter
 pandas
 matplotlib
 numpy
