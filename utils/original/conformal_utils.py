@@ -1,3 +1,5 @@
+# Copied from empirical-bayes-conformal repo and modified
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -5,9 +7,8 @@ import torch
 import pdb
 
 from collections import Counter
-from collections.abc import Mapping
 
-# For clustered conformal
+# For Clustered Conformal
 from .clustering_utils import embed_all_classes
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
@@ -111,6 +112,7 @@ def split_X_and_y(X, y, n_k, num_classes, seed=0, split='balanced'):
 
         # Randomly select n instances of class k
         idx = np.argwhere(y==k).flatten()
+#         pdb.set_trace()
         selected_idx = np.random.choice(idx, replace=False, size=(n_k[k],))
 
         X1[i:i+n_k[k]] = X[selected_idx]
@@ -131,73 +133,36 @@ def get_true_class_conformal_score(scores_all, labels):
     Inputs:
         scores_all: n x num_classes array 
         labels: length-n array of true class labels
-        
-    Output: length-n array of scores corresponding to true label for each entry
     '''
     return scores_all[np.arange(len(labels)), labels]
 
 #========================================
-#   General conformal utils
+#   Standard conformal inference
 #========================================
 
-def get_conformal_quantile(scores, alpha, default_qhat=np.inf, exact_coverage=False):
-    '''
-    Compute finite-sample-adjusted 1-alpha quantile of scores
-    
-    Inputs:
-        - scores: num_instances-length array of conformal scores for true class. A higher score 
-            indicates more uncertainty
-        - alpha: float between 0 and 1 specifying coverage level
-        - default_qhat: the value that will be returned if there are insufficient samples to compute
-        the quantile. Should be np.inf if you want a coverage guarantee.
-        - exact_coverage: If True return a dict of values {'q_a': q_a, 'q_b': q_b, 'gamma': gamma}
-        such that if you use q_hat = q_a w.p. gamma and q_b w.p. 1-gamma, you achieve exact 1-alpha
-        coverage
-    
-    '''
-    if exact_coverage:
-        q_a, q_b, gamma = get_exact_coverage_conformal_params(scores, alpha, default_qhat=np.inf)
-        exact_cov_params = {'q_a': q_a, 'q_b': q_b, 'gamma': gamma}
-        return exact_cov_params
-    
-    else:
-        n = len(scores)
-
-        if n == 0:
-            print(f'Using default q_hat of {default_qhat} because n={n}')
-            return default_qhat
-
-        val = np.ceil((n+1)*(1-alpha))/n
-        if val > 1:
-            print(f'Using default q_hat of {default_qhat} because n={n}')
-            qhat = default_qhat
-        else:
-            qhat = np.quantile(scores, val, method='inverted_cdf')
-
-        return qhat
-
-#========================================
-#   Standard conformal prediction
-#========================================
-
-def compute_qhat(scores_all, true_labels, alpha, exact_coverage=False, plot_scores=False):
+def compute_qhat(class_scores, true_labels, alpha, plot_scores=False):
     '''
     Compute quantile q_hat that will result in marginal coverage of (1-alpha)
     
     Inputs:
-        - scores_all: num_instances x num_classes array of scores, or num_instances-length array of 
+        class_scores: num_instances x num_classes array of scores, or num_instances-length array of 
         conformal scores for true class. A higher score indicates more uncertainty
-        - true_labels: num_instances length array of ground truth labels
-        - alpha: float between 0 and 1 specifying coverage level
-        - plot_scores: If True, plot histogram of true class scores 
-    '''
-    # If necessary, select scores that correspond to correct label
-    if len(scores_all.shape) == 2:
-        scores = np.squeeze(np.take_along_axis(scores_all, np.expand_dims(true_labels, axis=1), axis=1))
-    else:
-        scores = scores_all
+        true_labels: num_instances length array of ground truth labels
     
-    q_hat = get_conformal_quantile(scores, alpha, exact_coverage=exact_coverage)
+    '''
+    # Select scores that correspond to correct label
+    if len(class_scores.shape) == 2:
+        scores = np.squeeze(np.take_along_axis(class_scores, np.expand_dims(true_labels, axis=1), axis=1))
+    else:
+        scores = class_scores
+    
+    # Sort scores
+    scores = np.sort(scores)
+
+    # Identify score q_hat such that ~(1-alpha) fraction of scores are below qhat 
+    #    Note: More precisely, it is (1-alpha) times a small correction factor
+    n = len(true_labels)
+    q_hat = np.quantile(scores, np.ceil((n+1)*(1-alpha))/n, method='inverted_cdf')
     
     # Plot score distribution
     if plot_scores:
@@ -208,51 +173,29 @@ def compute_qhat(scores_all, true_labels, alpha, exact_coverage=False, plot_scor
     return q_hat
 
 # Create prediction sets
-def create_prediction_sets(scores_all, q_hat, exact_coverage=False):
-    '''
-    Create standard conformal prediction sets
-    
-    Inputs:
-        - scores_all: num_instances x num_classes array of scores
-        - q_hat: conformal quantile, as returned from compute_qhat()
-    '''
-    if exact_coverage:
-        assert isinstance(q_hat, Mapping), ('To create classwise prediction sets with exact coverage, '   
-        'you must pass in q_hats computed with exact_coverage=True')
-        
-        q_a, q_b, gamma = q_hat['q_a'], q_hat['q_b'], q_hat['gamma']
-        set_preds = construct_exact_coverage_standard_sets(q_a, q_b, gamma, scores_all)
-        
-    else:   
-        assert(not hasattr(q_hat, '__iter__')), "q_hat should be a single number and not a list or array"
-        scores_all = np.array(scores_all)
-        set_preds = []
-        num_samples = len(scores_all)
-        for i in range(num_samples):
-            set_preds.append(np.where(scores_all[i,:] <= q_hat)[0])
+def create_prediction_sets(class_probs, q_hat):
+    assert(not hasattr(q_hat, '__iter__')), "q_hat should be a single number and not a list or array"
+    class_probs = np.array(class_probs)
+    set_preds = []
+    num_samples = len(class_probs)
+    for i in range(num_samples):
+        set_preds.append(np.where(class_probs[i,:] <= q_hat)[0])
         
     return set_preds
 
 # Standard conformal pipeline
-def standard_conformal(cal_scores_all, cal_labels, val_scores_all, val_labels, alpha, exact_coverage=False):
-    '''
-    Use cal_scores_all and cal_labels to compute 1-alpha conformal quantiles for standard conformal.
-    If exact_coverage is True, apply randomized to achieve exact 1-alpha coverage. Otherwise, use
-    unrandomized conservative sets. 
-    Create predictions and compute evaluation metrics on val_scores_all and val_labels.
-    '''
-    
-    standard_qhat = compute_qhat(cal_scores_all, cal_labels, alpha, exact_coverage=exact_coverage)
-    standard_preds = create_prediction_sets(val_scores_all, standard_qhat, exact_coverage=exact_coverage)
+def standard_conformal_pipeline(totalcal_scores_all, totalcal_labels, val_scores_all, val_labels, alpha):
+    standard_qhat = compute_qhat(totalcal_scores_all, totalcal_labels, alpha=alpha)
+    standard_preds = create_prediction_sets(val_scores_all, standard_qhat)
     coverage_metrics, set_size_metrics = compute_all_metrics(val_labels, standard_preds, alpha)
     
     return standard_qhat, standard_preds, coverage_metrics, set_size_metrics
 
 #========================================
-#   Classwise conformal prediction
+#   Classwise conformal inference and regularized classwise
 #========================================
 
-# Unused in paper (only necessary if we apply regularization)
+# Additive version
 def reconformalize(qhats, scores, labels, alpha, adjustment_min=-1, adjustment_max=1):
     '''
     Adjust qhats by additive factor so that marginal coverage of 1-alpha is achieved
@@ -272,7 +215,7 @@ def reconformalize(qhats, scores, labels, alpha, adjustment_min=-1, adjustment_m
 
         curr_qhats = qhats + adjustment_guess 
 
-        preds = create_classwise_prediction_sets(scores, curr_qhats)
+        preds = create_cb_prediction_sets(scores, curr_qhats)
         marginal_coverage = compute_coverage(labels, preds)
         print(f"Marginal coverage: {marginal_coverage:.4f}")
 
@@ -290,141 +233,168 @@ def reconformalize(qhats, scores, labels, alpha, adjustment_min=-1, adjustment_m
     print('Final adjustment:', adjustment_guess)
     qhats += adjustment_guess
     
-    return qhats 
+    return qhats
 
-def compute_class_specific_qhats(cal_scores_all, cal_true_labels, num_classes, alpha, 
-                                 default_qhat=np.inf, null_qhat=None, regularize=False,
-                                 exact_coverage=False):
+# # Multiplicative version
+# def reconformalize(qhats, scores, labels, alpha, adjustment_min=0, adjustment_max=2):
+#     '''
+#     Adjust qhats by multiplicative factor so that marginal coverage of 1-alpha is achieved
+#     '''
+#     print('Applying multiplicative adjustment to qhats')
+#     # ===== Perform binary search =====
+#     # Convergence criteria: Either (1) marginal coverage is within tol of desired or (2)
+#     # quantile_min and quantile_max differ by less than .001, so there is no need to try 
+#     # to get a more precise estimate
+#     tol = 0.0005
+
+#     marginal_coverage = 0
+#     while np.abs(marginal_coverage - (1-alpha)) > tol:
+
+#         adjustment_guess = (adjustment_min +  adjustment_max) / 2
+#         print(f"\nCurrent adjustment: {adjustment_guess:.6f}")
+
+#         curr_qhats = qhats * adjustment_guess 
+
+#         preds = create_cb_prediction_sets(scores, curr_qhats)
+#         marginal_coverage = compute_coverage(labels, preds)
+#         print(f"Marginal coverage: {marginal_coverage:.4f}")
+
+#         if marginal_coverage > 1 - alpha:
+#             adjustment_max = adjustment_guess
+#         else:
+#             adjustment_min = adjustment_guess
+#         print(f"Search range: [{adjustment_min}, {adjustment_max}]")
+
+#         if adjustment_max - adjustment_min < .00001:
+#             adjustment_guess = adjustment_max # Conservative estimate, which ensures coverage
+#             print("Adequate precision reached; stopping early.")
+#             break
+            
+#     print('Final adjustment:', adjustment_guess)
+#     qhats += adjustment_guess
+    
+#     return qhats   
+
+def compute_class_specific_qhats(cal_class_scores, cal_true_labels, num_classes, alpha, 
+                                 default_qhat=np.inf, null_qhat='standard', regularize=False):
     '''
-    Computes class-specific quantiles (one for each class) that will result in coverage of (1-alpha)
+    Computes class-specific quantiles (one for each class) that will result in marginal coverage of (1-alpha)
     
     Inputs:
-        - cal_scores_all: 
-            num_instances x num_classes array where cal_scores_all[i,j] = score of class j for instance i
+        - cal_class_scores: 
+            num_instances x num_classes array where cal_class_scores[i,j] = score of class j for instance i
             OR
             num_instances length array where entry i is the score of the true label for instance i
-        - cal_true_labels: num_instances-length array of true class labels (0-indexed). 
-            [Useful for implenting clustered conformal] If class -1 appears, it will be assigned the 
-            default_qhat value. It is appended as an extra entry of the returned q_hats so that q_hats[-1] = null_qhat. 
+        - cal_true_labels: num_instances-length array of true class labels (0-indexed). If class -1 appears,
+        it will be assigned the default_qhat value. It is appended as an extra entry of the returned q_hats
+        so that q_hats[-1] = null_qhat
         - alpha: Determines desired coverage level
         - default_qhat: Float, or 'standard'. For classes that do not appear in cal_true_labels, the class 
         specific qhat is set to default_qhat. If default_qhat == 'standard', we compute the qhat for standard
-        conformal and use that as the default value. Should be np.inf if you want a coverage guarantee.
+        conformal and use that as the default value
         - null_qhat: Float, or 'standard', as described for default_qhat. Only used if -1 appears in
-        cal_true_labels. null_qhat is assigned to class/cluster -1 
+        cal_true_labels. null_qhat is assigned to 
+        class/cluster -1 
         - regularize: If True, shrink the class-specific qhat towards the default_qhat value. Amount of
-        shrinkage for a class is determined by number of samples of that class. Only implemented for 
-        exact_coverage=False.
-        - exact_coverage: If True return a dict of values {'q_a': q_a, 'q_b': q_b, 'gamma': gamma}
-        such that if you use q_hat = q_a w.p. gamma and q_b w.p. 1-gamma, you achieve exact 1-alpha
-        coverage
+        shrinkage for a class is determined by number of samples of that class
     '''
-    # Extract conformal scores for true labels if not already done
-    if len(cal_scores_all.shape) == 2:
-        cal_scores_all = cal_scores_all[np.arange(len(cal_true_labels)), cal_true_labels]
-       
-    if exact_coverage:
-        if default_qhat == 'standard':
-            default_qhat = get_exact_coverage_conformal_params(cal_scores_all, alpha, default_qhat=default_qhat)
-        q_a, q_b, gamma = compute_exact_coverage_class_specific_params(cal_scores_all, cal_true_labels, 
-                                                                       num_classes, alpha, 
-                                                                       default_qhat=default_qhat, null_params=null_qhat)
-        exact_cov_params = {'q_a': q_a, 'q_b': q_b, 'gamma': gamma}
+    
+    if default_qhat == 'standard':
+        default_qhat = compute_qhat(cal_class_scores, cal_true_labels, alpha=alpha)
         
-        return exact_cov_params
-    
-    else:
-    
-        if default_qhat == 'standard':
-            default_qhat = compute_qhat(cal_scores_all, cal_true_labels, alpha=alpha)
+    if null_qhat == 'standard':
+        null_qhat = compute_qhat(cal_class_scores, cal_true_labels, alpha=alpha)
+     
+    # If we are regularizing the qhats, we should set aside some data to correct the regularized qhats 
+    # to get a marginal coverage guarantee
+    if regularize:
+        num_reserve = min(1000, int(.5*len(cal_true_labels))) # Reserve 1000 or half of calibration set, whichever is smaller
+        idx = np.random.choice(np.arange(len(cal_true_labels)), size=num_reserve, replace=False)
+        idx2 = ~np.isin(np.arange(len(cal_true_labels)), idx)
+        reserved_scores, reserved_labels = cal_class_scores[idx], cal_true_labels[idx]
+        cal_class_scores, cal_true_labels = cal_class_scores[idx2], cal_true_labels[idx2]
+                 
+    num_samples = len(cal_true_labels)
+    q_hats = np.zeros((num_classes,)) # q_hats[i] = quantile for class i
+    class_cts = np.zeros((num_classes,))
+    for k in range(num_classes):
 
-        # If we are regularizing the qhats, we should set aside some data to correct the regularized qhats 
-        # to get a marginal coverage guarantee
-        if regularize:
-            num_reserve = min(1000, int(.5*len(cal_true_labels))) # Reserve 1000 or half of calibration set, whichever is smaller
-            idx = np.random.choice(np.arange(len(cal_true_labels)), size=num_reserve, replace=False)
-            idx2 = ~np.isin(np.arange(len(cal_true_labels)), idx)
-            reserved_scores, reserved_labels = cal_scores_all[idx], cal_true_labels[idx]
-            cal_scores_all, cal_true_labels = cal_scores_all[idx2], cal_true_labels[idx2]
+        # Only select data for which k is true class
+        idx = (cal_true_labels == k)
 
+        if len(cal_class_scores.shape) == 2:
+            scores = cal_class_scores[idx, k]
+        else:
+            scores = cal_class_scores[idx]
 
-        q_hats = np.zeros((num_classes,)) # q_hats[i] = quantile for class i
-        class_cts = np.zeros((num_classes,))
+        class_cts[k] = scores.shape[0]
 
-        for k in range(num_classes):
+        if len(scores) == 0:
+            assert default_qhat is not None, f"Class/cluster {k} does not appear in the calibration set, so the quantile for this class cannot be computed. Please specify a value for default_qhat to use in this case."
+            print(f'Warning: Class/cluster {k} does not appear in the calibration set,', 
+                  f'so default q_hat value of {default_qhat} will be used')
+            q_hats[k] = default_qhat
+        else:
+            scores = np.sort(scores)
+            num_samples = len(scores)
+            val = np.ceil((num_samples+1)*(1-alpha)) / num_samples
+            if val > 1:
+                assert default_qhat is not None, f"Class/cluster {k} does not appear enough times to compute a proper quantile. Please specify a value for default_qhat to use in this case."
+                print(f'Warning: Class/cluster {k} does not appear enough times to compute a proper quantile,', 
+                      f'so default q_hat value of {default_qhat} will be used')
+                q_hats[k] = default_qhat
+            else:
+                q_hats[k] = np.quantile(scores, val, method='inverted_cdf')
+                
+    if -1 in cal_true_labels:
+        q_hats = np.concatenate((q_hats, [null_qhat]))
+     
+    # Optionally apply shrinkage 
+    if regularize:
+        N = num_classes
+        n_k = np.maximum(class_cts, 1) # So that classes that never appear do not cause division by 0 issues. 
+        shrinkage_factor = .03 * n_k # smaller = less shrinkage
+        shrinkage_factor = np.minimum(shrinkage_factor, 1)
+        print('SHRINKAGE FACTOR:', shrinkage_factor)  
+        print(np.min(shrinkage_factor), np.max(shrinkage_factor))
+        q_hats = default_qhat + shrinkage_factor * (q_hats - default_qhat)
+        
+        # Correct qhats via additive factor to achieve marginal coverage
+        q_hats = reconformalize(q_hats, reserved_scores, reserved_labels, alpha)
 
-            # Only select data for which k is true class
-            idx = (cal_true_labels == k)
-            scores = cal_scores_all[idx]
+       
+    return q_hats
 
-            class_cts[k] = scores.shape[0]
-
-            q_hats[k] = get_conformal_quantile(scores, alpha, default_qhat=default_qhat)
-            
-            
-        if -1 in cal_true_labels:
-            q_hats = np.concatenate((q_hats, [null_qhat]))
-
-
-        # Optionally apply shrinkage 
-        if regularize:
-            N = num_classes
-            n_k = np.maximum(class_cts, 1) # So that classes that never appear do not cause division by 0 issues. 
-            shrinkage_factor = .03 * n_k # smaller = less shrinkage
-            shrinkage_factor = np.minimum(shrinkage_factor, 1)
-            print('SHRINKAGE FACTOR:', shrinkage_factor)  
-            print(np.min(shrinkage_factor), np.max(shrinkage_factor))
-            q_hats = default_qhat + shrinkage_factor * (q_hats - default_qhat)
-
-            # Correct qhats via additive factor to achieve marginal coverage
-            q_hats = reconformalize(q_hats, reserved_scores, reserved_labels, alpha)
-
-
-        return q_hats
-
-# Create classwise prediction sets
-def create_classwise_prediction_sets(scores_all, q_hats, exact_coverage=False):
+# Create class_balanced prediction sets
+def create_cb_prediction_sets(class_scores, q_hats):
     '''
     Inputs:
-        - scores_all: num_instances x num_classes array where scores_all[i,j] = score of class j for instance i
+        - class_scores: num_instances x num_classes array where class_scores[i,j] = score of class j for instance i
         - q_hats: as output by compute_class_specific_quantiles
-        - exact_coverage: Must match the exact_coverage setting used to compute q_hats. 
     '''
-    if exact_coverage:
-        assert isinstance(q_hats, Mapping), ('To create classwise prediction sets with exact coverage, '   
-        'you must pass in q_hats computed with exact_coverage=True')
+    class_scores = np.array(class_scores)
+    set_preds = []
+    num_samples = len(class_scores)
+    for i in range(num_samples):
+        set_preds.append(np.where(class_scores[i,:] <= q_hats)[0])
         
-        q_as, q_bs, gammas = q_hats['q_a'], q_hats['q_b'], q_hats['gamma']
-        set_preds = construct_exact_coverage_classwise_sets(q_as, q_bs, gammas, scores_all)
-    
-    else:
-        scores_all = np.array(scores_all)
-        set_preds = []
-        num_samples = len(scores_all)
-        for i in range(num_samples):
-            set_preds.append(np.where(scores_all[i,:] <= q_hats)[0])
-
     return set_preds
 
 
 # Classwise conformal pipeline
-def classwise_conformal(totalcal_scores_all, totalcal_labels, val_scores_all, val_labels, alpha,
-                         num_classes, default_qhat=np.inf, regularize=False, exact_coverage=False):
+def classwise_conformal_pipeline(totalcal_scores_all, totalcal_labels, val_scores_all, val_labels, alpha,
+                                 num_classes,
+                                 default_qhat=np.inf, regularize=False):
     '''
-    Use cal_scores_all and cal_labels to compute 1-alpha conformal quantiles for classwise conformal.
-    If exact_coverage is True, apply randomized to achieve exact 1-alpha coverage. Otherwise, use
-    unrandomized conservative sets. 
-    Create predictions and compute evaluation metrics on val_scores_all and val_labels.
+    See compute_class_specific_qhats() for doc-string
     
-    See compute_class_specific_qhats() docstring for more details about expected inputs.
     '''
     
     classwise_qhats = compute_class_specific_qhats(totalcal_scores_all, totalcal_labels, 
                                                    alpha=alpha, 
                                                    num_classes=num_classes,
-                                                   default_qhat=default_qhat, regularize=regularize,
-                                                   exact_coverage=exact_coverage)
-    classwise_preds = create_classwise_prediction_sets(val_scores_all, classwise_qhats, exact_coverage=exact_coverage)
+                                                   default_qhat=default_qhat, regularize=regularize)
+    classwise_preds = create_cb_prediction_sets(val_scores_all, classwise_qhats)
 
     coverage_metrics, set_size_metrics = compute_all_metrics(val_labels, classwise_preds, alpha)
     
@@ -435,43 +405,39 @@ def classwise_conformal(totalcal_scores_all, totalcal_labels, val_scores_all, va
 #   Clustered conformal prediction
 #========================================
 
-def compute_cluster_specific_qhats(cluster_assignments, cal_scores_all, cal_true_labels, alpha, 
+def compute_cluster_specific_qhats(cluster_assignments, cal_class_scores, cal_true_labels, alpha, 
                                    null_qhat='standard', exact_coverage=False):
     '''
-    Computes cluster-specific quantiles (one for each class) that will result in coverage of (1-alpha)
+    Computes cluster-specific quantiles (one for each class) that will result in marginal coverage of (1-alpha)
     
     Inputs:
         - cluster_assignments: num_classes length array where entry i is the index of the cluster that class i belongs to.
           Clusters should be 0-indexed. Rare classes can be assigned to cluster -1 and they will automatically be given
           qhat_k = default_qhat. 
-        - cal_scores_all: num_instances x num_classes array where scores_all[i,j] = score of class j for instance i.
+        - cal_class_scores: num_instances x num_classes array where class_scores[i,j] = score of class j for instance i.
          Alternatively, a num_instances-length array of conformal scores for true class
         - cal_true_labels: num_instances length array of true class labels (0-indexed)
         - alpha: Determines desired coverage level
         - null_qhat: For classes that do not appear in cal_true_labels, the class specific qhat is set to null_qhat.
         If null_qhat == 'standard', we compute the qhat for standard conformal and use that as the default value
-        - exact_coverage: If True, return a dict of values {'q_a': q_a, 'q_b': q_b, 'gamma': gamma}
-        such that if you use q_hat = q_a w.p. gamma and q_b w.p. 1-gamma, you achieve exact 1-alpha
-        coverage
-         
+        - exact_coverage: If True, randomize the prediction sets to achieve exact 1-alpha coverage. Otherwise, 
+         the sets will be unrandomized but slightly conservative
     Output:
-        num_classes length array where entry i is the quantile corresponding to the cluster that class i belongs to. 
+        num_classes length array where entry i is the quantile correspond to the cluster that class i belongs to. 
         All classes in the same cluster have the same quantile.
-        
-        OR (if exact_coverage=True), dict containing clustered conformal parameters needed to achieve exact coverage
     '''
-    # If we want the null_qhat to be the standard qhat, we should compute this using the original class labels
-    if null_qhat == 'standard' and not exact_coverage:
-        null_qhat = compute_qhat(cal_scores_all, cal_true_labels, alpha)
+    # If we want the null_qhat to be the standard qhat, we should compute this before we remap the values
+    if null_qhat == 'standard':
+        null_qhat = compute_qhat(cal_class_scores, cal_true_labels, alpha)
             
     # Extract conformal scores for true labels if not already done
-    if len(cal_scores_all.shape) == 2:
-        cal_scores_all = cal_scores_all[np.arange(len(cal_true_labels)), cal_true_labels]
+    if len(cal_class_scores) == 2:
+        cal_class_scores = cal_class_scores[np.arange(len(cal_true_labels)), cal_true_labels]
         
     # Edge case: all cluster_assignments are -1. 
     if np.all(cluster_assignments==-1):
         if exact_coverage:
-            null_qa, null_qb, null_gamma = get_exact_coverage_conformal_params(cal_scores_all, alpha) # Assign standard conformal params to null cluster
+            null_qa, null_qb, null_gamma = get_exact_coverage_conformal_params(cal_class_scores, alpha) # Assign standard conformal params to null cluster
             q_as = null_qa * np.ones(cluster_assignments.shape)
             q_bs = null_qb * np.ones(cluster_assignments.shape)
             gammas = null_gamma * np.ones(cluster_assignments.shape)
@@ -484,12 +450,11 @@ def compute_cluster_specific_qhats(cluster_assignments, cal_scores_all, cal_true
     
     # Compute cluster qhats
     if exact_coverage:
-        if null_qhat == 'standard':
-            null_qa, null_qb, null_gamma = get_exact_coverage_conformal_params(cal_scores_all, alpha) # Assign standard conforml params to null cluster
-            null_params = {'q_a': null_qa, 'q_b': null_qb, 'gamma': null_gamma}
-        clustq_as, clustq_bs, clustgammas = compute_exact_coverage_class_specific_params(cal_scores_all, cal_true_clusters,
+        null_qa, null_qb, null_gamma = get_exact_coverage_conformal_params(cal_class_scores, alpha) # Assign standard conforml params to null cluster
+        null_params = {'q_a': null_qa, 'q_b': null_qb, 'gamma': null_gamma}
+        clustq_as, clustq_bs, clustgammas = compute_exact_coverage_class_specific_params(cal_class_scores, cal_true_clusters,
                                                                           num_classes=np.max(cluster_assignments)+1, 
-                                                                          alpha=alpha, 
+                                                                                         alpha=alpha, 
                                                                           default_qhat=np.inf, null_params=null_params)
         # Map cluster qhats back to classes
         num_classes = len(cluster_assignments)
@@ -500,8 +465,7 @@ def compute_cluster_specific_qhats(cluster_assignments, cal_scores_all, cal_true
         return q_as, q_bs, gammas
    
     else:
-            
-        cluster_qhats = compute_class_specific_qhats(cal_scores_all, cal_true_clusters, 
+        cluster_qhats = compute_class_specific_qhats(cal_class_scores, cal_true_clusters, 
                                                      alpha=alpha, num_classes=np.max(cluster_assignments)+1,
                                                      default_qhat=np.inf,
                                                      null_qhat=null_qhat)                            
@@ -511,7 +475,7 @@ def compute_cluster_specific_qhats(cluster_assignments, cal_scores_all, cal_true
 
         return class_qhats
 
-    # Note: To create prediction sets, just pass class_qhats into create_classwise_prediction_sets()
+    # Note: To create prediction sets, just pass class_qhats into create_cb_prediction_sets()
     
     
 def clustered_conformal(totalcal_scores_all, totalcal_labels,
@@ -519,22 +483,20 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
                         val_scores_all=None, val_labels=None,
                         frac_clustering='auto', num_clusters='auto',
                         split='random',
-                        exact_coverage=False, seed=0):
+                        exact_coverage=False):
     '''
-    Use totalcal_scores and totalcal_labels to compute conformal quantiles for each
+    Use totalcal_scores and total_labels to compute conformal quantiles for each
     class using the clustered conformal procedure. Optionally evaluates 
     performance on val_scores and val_labels
     
     Clustered conformal procedure:
-        1. Filter out classes where np.ceil((num_samples+1)*(1-alpha)) / num_samples < 1. 
-           Assign those classes the standard qhat
-        2. To select n_clustering (or frac_clustering) and num_clusters, apply heuristic 
-           (which takes as input num_samples and num_classes) to num_samples of rarest remaining class
+        1. Filter out classes where np.ceil((num_samples+1)*(1-alpha)) / num_samples < 1. Assign those classes the standard qhat
+        2. To select n_clustering and num_clusters, apply heuristic (which takes as input num_samples and num_classes) to num_samples of rarest remaining class
         3. Run clustering with chosen hyperparameters. Estimate a qhat for each cluster.
     
     Inputs:
          - totalcal_scores: num_instances x num_classes array where 
-           cal_scores_all[i,j] = score of class j for instance i
+           cal_class_scores[i,j] = score of class j for instance i
          - totalcal_labels: num_instances-length array of true class labels (0-indexed classes)
          - alpha: number between 0 and 1 that determines coverage level.
          Coverage level will be 1-alpha.
@@ -554,7 +516,6 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
          clustering step with some fixed probability) 
          - exact_coverage: If True, randomize the prediction sets to achieve exact 1-alpha coverage. Otherwise, 
          the sets will be unrandomized but slightly conservative
-         - seed: Random seed. Affects split between clustering set and proper calibraton set
          
     Outputs:
         - qhats: num_classes-length array where qhats[i] = conformal quantial estimate for class i
@@ -564,8 +525,6 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
             - val_set_size_metrics: Dict containing set size metrics, compute on val_scores and val_labels
             
     '''
-    np.random.seed(seed) 
-    
     def get_rare_classes(labels, alpha, num_classes):
         thresh = get_quantile_threshold(alpha)
         classes, cts = np.unique(labels, return_counts=True)
@@ -646,6 +605,7 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
     else:
         raise Exception('Invalid split. Options are balanced, proportional, doubledip, and random')
 
+    
     # 2b)  Identify "rare" classes = classes that have fewer than 1/alpha - 1 examples 
     # in the clustering set 
     rare_classes = get_rare_classes(labels1, alpha, num_classes)
@@ -680,7 +640,7 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
     cal_scores_all = scores2
     cal_labels = labels2
     if exact_coverage: 
-        q_as, q_bs, gammas = compute_cluster_specific_qhats(cluster_assignments, cal_scores_all, cal_labels, alpha, 
+        q_as, q_bs, gammas =  compute_cluster_specific_qhats(cluster_assignments, cal_scores_all, cal_labels, alpha, 
                                    null_qhat='standard', exact_coverage=True)
         
     else: 
@@ -688,7 +648,6 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
                    cal_scores_all, cal_labels, 
                    alpha=alpha, 
                    null_qhat='standard')
-        
 
     # 5) [Optionally] Apply to val set. Evaluate class coverage gap and set size 
     if (val_scores_all is not None) and (val_labels is not None):
@@ -696,13 +655,12 @@ def clustered_conformal(totalcal_scores_all, totalcal_labels,
             preds = construct_exact_coverage_classwise_sets(q_as, q_bs, gammas, val_scores_all)
             qhats = {'q_a': q_as, 'q_b': q_bs, 'gamma': gammas} # Alias for function return
         else:
-            preds = create_classwise_prediction_sets(val_scores_all, qhats)
+            preds = create_cb_prediction_sets(val_scores_all, qhats)
         class_cov_metrics, set_size_metrics = compute_all_metrics(val_labels, preds, alpha,
                                                                   cluster_assignments=cluster_assignments)
 
         # Add # of classes excluded from clustering to class_cov_metrics
         class_cov_metrics['num_unclustered_classes'] = len(rare_classes)
-        
         return qhats, preds, class_cov_metrics, set_size_metrics
     else:
         return qhats
@@ -734,6 +692,7 @@ def get_clustering_parameters(num_classes, n_totalcal):
 #========================================
 #   Conformal variant: exact coverage via randomization 
 #========================================
+# Currently implemented for classwise only, but can also be used for standard conformal or clustered conformal
 
 def get_exact_coverage_conformal_params(scores, alpha, default_qhat=np.inf):
     '''
@@ -744,8 +703,8 @@ def get_exact_coverage_conformal_params(scores, alpha, default_qhat=np.inf):
         alpha: float between 0 and 1 denoting the desired coverage level
         default_qhat = value used when n is too small for computing the relevant quantiles
     Outputs:
-        q_a: The smallest score that is larger than (n+1) * (1-alpha) of the other scores (= normal conformal qhat)
-        q_b: The smallest score that is larger than (n+1) * (1-alpha) - 1 of the other scores
+        q_a = The smallest score that is larger than (n+1) * (1-alpha) of the other scores (= normal conformal qhat)
+        q_b The smallest score that is larger than (n+1) * (1-alpha) - 1 of the other scores
         gamma: value between 0 and 1 such that gamma * q_a + (1-gamma)*g_b = 1-alpha
     '''
 
@@ -772,44 +731,61 @@ def get_exact_coverage_conformal_params(scores, alpha, default_qhat=np.inf):
     else:
         overcov = np.ceil((n+1)*(1-alpha))/(n+1) - (1-alpha) # How much coverage using q_a will exceed 1 - alpha
         undercov = (1-alpha) - (np.ceil((n+1)*(1-alpha))-1)/(n+1)  #  How much coverage using q_b will undershoot 1 - alpha
+#         print(f'overcov: {overcov:.3f}, undercov: {undercov:.3f}')
         gamma = undercov / (undercov + overcov)
 
     return q_a, q_b, gamma
 
-def construct_exact_coverage_standard_sets(q_a, q_b, gamma, scores_all):
+# ------ RANDOMIZED STANDARD ------
+def construct_exact_coverage_standard_sets(q_a, q_b, gamma, class_scores):
     '''
-    Construct randomized standard conformal sets
-    
-    Inputs:
-        - q_a, q_b, gamma: as output by get_exact_coverage_conformal_params()
-        - scores_all: num_instances x num_classes array
+    class_scores: num_instances x num_classes array
     '''
     # In non-randomized conformal, the qhat vector is fixed. But now, it will vary for each validation example
       
-    scores_all = np.array(scores_all)
+    class_scores = np.array(class_scores)
     set_preds = []
-    num_samples = len(scores_all)
+    num_samples = len(class_scores)
     for i in range(num_samples):
         if np.random.rand() < gamma: # Bernoulli random var
             q_hat = q_a
         else:
             q_hat = q_b
-        set_preds.append(np.where(scores_all[i,:] <= q_hat)[0]) 
+        set_preds.append(np.where(class_scores[i,:] <= q_hat)[0]) 
+
+    return set_preds
+
+
+def exact_coverage_standard_conformal_pipeline(totalcal_scores_all, totalcal_labels, val_scores_all, val_labels, alpha):
+    totalcal_scores = totalcal_scores_all[np.arange(len(totalcal_labels)), totalcal_labels]
+    q_a, q_b, gamma = get_exact_coverage_conformal_params(totalcal_scores, alpha)
+    
+    standard_preds = construct_exact_coverage_standard_sets(q_a, q_b, gamma, val_scores_all)
+    coverage_metrics, set_size_metrics = compute_all_metrics(val_labels, standard_preds, alpha)
+    
+    exact_cov_params = {'q_a': q_a, 'q_b': q_b, 'gamma': gamma}
+    
+    return exact_cov_params, standard_preds, coverage_metrics, set_size_metrics
+
+# ------ RANDOMIZED CLASSWISE ------
+# (Code is also used for randomized clustered conformal)
+def construct_exact_coverage_classwise_sets(q_as, q_bs, gammas, class_scores):
+    # In non-randomized conformal, the qhat vector is fixed. But now, it will vary for each validation example
+      
+    class_scores = np.array(class_scores)
+    set_preds = []
+    num_samples = len(class_scores)
+    for i in range(num_samples):
+        Bs = np.random.rand(len(gammas)) < gammas # Bernoulli random vars
+        q_hats = np.where(Bs, q_as, q_bs)
+        set_preds.append(np.where(class_scores[i,:] <= q_hats)[0]) 
 
     return set_preds
 
 def compute_exact_coverage_class_specific_params(scores_all, labels, num_classes, alpha, 
                                  default_qhat=np.inf, null_params=None):
     '''
-    Compute the quantities necessary for performing classwise conformal prediction with exact coverage
-    
-    Inputs:
-        - scores_all: (num_instances, num_classes) array where scores_all[i,j] = score of class j for instance i
-        - labels: (num_instances,) array of true class labels
-        - num_classes: Number of classes
-        - alpha: number between 0 and 1 specifying desired coverage level
-        - default_qhat: Quantile that will be used when there is insufficient data to compute a quantile
-        - null_params: Dict of {'q_a': ..., 'q_b': ...., 'gamma', ...} to be assigned to
+    null_parms: Dict of {'q_a': ..., 'q_b': ...., 'gamma', ...} to be assigned to
                class -1 (will be appended to end of param lists). Not needed if -1 does not appear in labels
     '''
     
@@ -825,7 +801,7 @@ def compute_exact_coverage_class_specific_params(scores_all, labels, num_classes
         else:
             scores = scores_all[idx]
         
-        q_a, q_b, gamma = get_exact_coverage_conformal_params(scores, alpha, default_qhat=default_qhat)
+        q_a, q_b, gamma = get_exact_coverage_conformal_params(scores, alpha, default_qhat=np.inf)
         q_as[k] = q_a
         q_bs[k] = q_b
         gammas[k] = gamma
@@ -836,19 +812,26 @@ def compute_exact_coverage_class_specific_params(scores_all, labels, num_classes
         gamma = np.concatenate((gammas, [null_params['gamma']]))
         
     return q_as, q_bs, gammas
-  
-def construct_exact_coverage_classwise_sets(q_as, q_bs, gammas, scores_all):
-    # In non-randomized conformal, the qhat vector is fixed. But now, it will vary for each validation example
-      
-    scores_all = np.array(scores_all)
-    set_preds = []
-    num_samples = len(scores_all)
-    for i in range(num_samples):
-        Bs = np.random.rand(len(gammas)) < gammas # Bernoulli random vars
-        q_hats = np.where(Bs, q_as, q_bs)
-        set_preds.append(np.where(scores_all[i,:] <= q_hats)[0]) 
+        
+    
+def exact_coverage_classwise_conformal_pipeline(scores_all, labels, num_classes, alpha, default_qhat=np.inf, 
+                                       val_scores_all=None, val_labels=None):
+        
+    q_as, q_bs, gammas = compute_exact_coverage_class_specific_params(scores_all, labels, num_classes, alpha, 
+                                 default_qhat=default_qhat)
+    exact_cov_params = {'q_a': q_as, 'q_b': q_bs, 'gamma': gammas}
+    
+    # Optionally, compute coverage metrics on validation data
+    if (val_scores_all is not None) and (val_labels is not None):
+        preds = construct_exact_coverage_classwise_sets(q_as, q_bs, gammas, val_scores_all)
+        class_cov_metrics, set_size_metrics = compute_all_metrics(val_labels, preds, alpha)
 
-    return set_preds
+        return exact_cov_params, preds, class_cov_metrics, set_size_metrics
+    else:
+        return exact_cov_params
+    
+# # ------ RANDOMIZED CLUSTERED ------
+# See exact_coverage=True option of clustered_conformal
 
 #========================================
 #   Adaptive Prediction Sets (APS)
@@ -907,17 +890,9 @@ def get_APS_scores_all(softmax_scores, randomize=True, seed=0):
 #   Regularized Adaptive Prediction Sets (RAPS)
 #========================================
 
-def get_RAPS_scores(softmax_scores, labels, lmbda=.01, kreg=5, randomize=True, seed=0):
+def get_RAPS_scores(softmax_scores, labels, lmbda, kreg, randomize=True, seed=0):
     '''
-    Essentially the same as get_APS_scores() except with regularization.
-    See "Uncertainty Sets for Image Classifiers using Conformal Prediction" (Angelopoulos et al., 2021)
-    
-    Inputs:
-        softmax_scores: n x num_classes
-        labels: length-n array of class labels
-        lmbda, kreg: regularization parameters
-    Output: 
-        length-n array of APS scores
+    Essentially the same as get_APS_scores() except with regularization
     
     '''
     n = len(labels)
@@ -984,7 +959,7 @@ def compute_coverage(true_labels, set_preds):
     
     return set_pred_acc
 
-# Helper function for computing class-conditional coverage of confidence sets
+# Helper function for computing class-specific coverage of confidence sets
 def compute_class_specific_coverage(true_labels, set_preds):
     num_classes = max(true_labels) + 1
     class_specific_cov = np.zeros((num_classes,))

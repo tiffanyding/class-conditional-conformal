@@ -1,4 +1,8 @@
+old/
 data/
+figs/
+*r152_3x_sk1*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

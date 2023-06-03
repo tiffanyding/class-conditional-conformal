@@ -4,6 +4,118 @@ import numpy as np
 from scipy import stats
 from sklearn.cluster import KMeans
 
+#========================================
+#   Misc.
+#========================================
+
+def get_true_class_conformal_score(scores_all, labels):
+    '''
+    Extracts conformal scores that corresponds to the true class labels
+    
+    Inputs:
+        scores_all: n x num_classes array 
+        labels: length-n array of true class labels
+    '''
+    return scores_all[np.arange(len(labels)), labels]
+
+#========================================
+#  Testing null hypothesis of one cluster
+#========================================
+
+# from sklearn import metrics 
+
+
+# def compute_avg_distance_between_quantiles(list_of_arrs, q=[0.5, 0.6, 0.7, 0.8, 0.9]):
+#     '''
+#     Computes the L1 distance between quantiles q between each pair of groups
+#     in list_of_arrs and then takes average across all pairs
+    
+#     Input:
+#         list_of_arrs: length-n list of arrays. list_of_arrs[i] contains 
+#         samples from group i
+#     '''
+#     n_groups = len(list_of_arrs)
+    
+#     dists = []
+#     for i in range(n_groups):
+        
+#         groupi_quantiles = np.quantile(list_of_arrs[i], q)
+        
+#         for j in range(i+1, n_groups):
+#             groupj_quantiles = np.quantile(list_of_arrs[j], q)
+            
+#             dist_ij = np.sum(np.abs(groupi_quantiles - groupj_quantiles))
+#             dists.append(dist_ij)
+            
+#     avg_dist = sum(dists) / len(dists)
+#     return avg_dist
+
+# def _get_cluster_fit(true_class_scores, labels, num_classes, num_clusters):
+#     '''
+#     Cluster scores = union of scores for each class in the cluster
+#     Compute quantile embedding on cluster scores
+#     Compute average pairwise distance between cluster embeddings
+    
+#     Under null hypothesis (i.e., no clusters), the pairwise distances should 
+#     be approximately 0. However, if there are clusters, the distances should 
+#     be > 0. 
+#     '''
+    
+#     # Compute embeddings
+#     q = [0.5, 0.6, 0.7, 0.8, 0.9]
+#     embeddings = np.zeros((num_classes, len(q)))
+#     for i in range(num_classes):
+#         class_i_scores = true_class_scores[labels==i]
+#         embeddings[i,:] = quantile_embedding(class_i_scores, q=q)
+
+#     kmeans = KMeans(n_clusters=num_clusters, random_state=0, n_init=10).fit(embeddings)
+#     cluster_labels = kmeans.labels_
+    
+#     # Average L1 distance of quantiles of original scores in each cluster ???
+#     list_of_cluster_scores = []
+#     for i in range(num_clusters):
+#         clusteri_classes = np.argwhere(cluster_labels == i)
+#         clusteri_scores = true_class_scores[np.in1d(labels, clusteri_classes)]
+#         list_of_cluster_scores.append(clusteri_scores)
+#     cluster_fit_metric = compute_avg_distance_between_quantiles(list_of_cluster_scores, q=q)
+    
+#     return cluster_fit_metric
+
+
+# def test_one_cluster_null(scores, labels, num_classes, num_clusters, 
+#                           num_trials=100, seed=0, print_results=False):
+#     np.random.seed(seed)
+    
+#     if len(scores.shape) > 1:
+#         true_class_scores = get_true_class_conformal_score(scores, labels)
+#     else:
+#         true_class_scores = scores
+    
+#     # Compute metric using true class labels
+#     observed_metric = _get_cluster_fit(true_class_scores, labels, num_classes, num_clusters)   
+    
+#     metrics_under_null = np.zeros((num_trials,))
+#     permuted_labels = np.copy(labels)
+#     for i in range(num_trials):
+#         # Randomly permute labels
+#         np.random.shuffle(permuted_labels)
+        
+#         # Compute metric for each random permutation 
+#         metrics_under_null[i] = _get_cluster_fit(true_class_scores, permuted_labels, num_classes, num_clusters)
+        
+#     # Compute fraction of results under null that yield a better clustering metric 
+#     # than the observed value 
+#     num_better = np.sum(metrics_under_null > observed_metric) # Lower inertia = better clustering
+#     p_value = num_better / num_trials
+    
+#     if print_results:
+#         print('Observed metric:', observed_metric)
+#         print('Metric under null:', metrics_under_null)
+
+#         print(f'\nProbability of observing a larger metric under null hypothesis of one cluster: {p_value}',
+#               f'({num_better} out of {num_trials} trials)')
+    
+#     return p_value
 
 #========================================
 #   Computing embeddings for k-means
