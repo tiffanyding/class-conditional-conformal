@@ -356,6 +356,7 @@ def get_metric_df(dataset, cal_sampling, metric,
                   method_list = ['standard', 'classwise', 'cluster_random'],
                   n_list = [10, 20, 30, 40, 50, 75, 100, 150],
                   show_seed_ct=False,
+                  print_folder=True,
                   save_folder='../.cache/paper/varying_n'): # May have to update this path
     '''
     Similar to average_results_across_seeds
@@ -366,7 +367,8 @@ def get_metric_df(dataset, cal_sampling, metric,
     for n_totalcal in n_list:
 
         curr_folder = f'{save_folder}/{dataset}/{cal_sampling}_calset/n_totalcal={n_totalcal}/score={score_function}'
-        print(curr_folder)
+        if print_folder:
+            print(curr_folder)
 
         df = average_results_across_seeds(curr_folder, print_results=False, 
                                           display_table=False, methods=method_list, max_seeds=10,
