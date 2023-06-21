@@ -1,17 +1,13 @@
 
-<!-- TODOs:
-[ ] rewrite model training
-[ ] Run notebooks using clean environment: or open in colab  -->
-
-This is the code release accompanying the paper [TODO: add arXiv link]
+This is the code release accompanying the paper [Class-Conditional Conformal Prediction with Many Classes](https://arxiv.org/abs/2306.09335)
 
 Citation: 
 ```
-@article{ding2021class,
+@article{ding2023classconditional,
   title={Class-Conditional Conformal Prediction with Many Classes},
   author={Ding, Tiffany and Angelopoulos, Anastasios N and Bates, 
           Stephen and Jordan, Michael I and Tibshirani, Ryan J},
-  journal={TODO},
+  journal={arXiv preprint arXiv:2306.09335},
   year={2023}
 }
 ```
