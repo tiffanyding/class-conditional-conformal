@@ -162,6 +162,8 @@ def get_conformal_quantile(scores, alpha, default_qhat=np.inf, exact_coverage=Fa
     
     else:
         n = len(scores)
+        if default_qhat == 'max':
+            default_qhat = np.max(scores)
 
         if n == 0:
             print(f'Using default q_hat of {default_qhat} because n={n}')

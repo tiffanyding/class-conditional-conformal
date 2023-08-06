@@ -163,6 +163,13 @@ def run_one_experiment(dataset, save_folder, alpha, n_totalcal, score_function_l
                                                                val_scores_all, val_labels, alpha, 
                                                                num_classes=totalcal_scores_all.shape[1],
                                                                default_qhat='standard', regularize=False)
+                elif method == 'classwise_default_max':
+                    # Classwise conformal, but use largest conformal score in calibration dataset for each y
+                    # as default value instead of infinity 
+                    all_results[method] = classwise_conformal(totalcal_scores_all, totalcal_labels, 
+                                                               val_scores_all, val_labels, alpha, 
+                                                               num_classes=totalcal_scores_all.shape[1],
+                                                               default_qhat='max', regularize=False)
                     
                 elif method == 'cluster_proportional':
                     # Clustered conformal with proportionally sampled clustering set
@@ -179,7 +186,7 @@ def run_one_experiment(dataset, save_folder, alpha, n_totalcal, score_function_l
                                                                 split='doubledip')
 
                 elif method == 'cluster_random':
-                    # Clustered conformal with double dipping for clustering and calibration
+                    # [RECOMMENDED] Clustered conformal with double dipping for clustering and calibration
                     all_results[method] = clustered_conformal(totalcal_scores_all, totalcal_labels,
                                                                 alpha,
                                                                 val_scores_all, val_labels, 
