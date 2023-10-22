@@ -1,4 +1,5 @@
-# Datasets
+# Code for training models and generating conformal scores
+
 
 
 ## ImageNet
