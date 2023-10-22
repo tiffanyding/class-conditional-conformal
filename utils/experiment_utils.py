@@ -253,10 +253,98 @@ def initialize_metrics_dict(methods):
                            'max_class_cov_gap': [],
                            'avg_set_size': [],
                            'marginal_cov': [],
-                           'very_undercovered': []} # Could also retrieve other metrics
+                           'very_undercovered': [],
+                           'undercov_gap': [],
+                           'overcov_gap': []} # Could also retrieve other metrics
         
     return metrics
 
+# Original version, without undercov_gap and overcov_gap
+# def average_results_across_seeds(folder, print_results=True, display_table=True, show_seed_ct=False, 
+#                                  methods=['standard', 'classwise', 'cluster_balanced'],
+#                                  max_seeds=np.inf):
+#     '''
+#     Input:
+#         - max_seeds: If we discover more than max_seeds random seeds, only use max_seeds of them
+#     '''
+
+    
+#     file_names = sorted(glob.glob(os.path.join(folder, '*.pkl')))
+#     num_seeds = len(file_names)
+#     if show_seed_ct:
+#         print('Number of seeds found:', num_seeds)
+#     if max_seeds < np.inf and num_seeds > max_seeds:
+#         print(f'Only using {max_seeds} seeds')
+#         file_names = file_names[:max_seeds]
+    
+#     metrics = initialize_metrics_dict(methods)
+    
+#     for pth in file_names:
+#         with open(pth, 'rb') as f:
+#             results = pickle.load(f)
+                        
+#         for method in methods:
+#             try:
+#                 metrics[method]['class_cov_gap'].append(results[method][2]['mean_class_cov_gap'])
+#                 metrics[method]['avg_set_size'].append(results[method][3]['mean'])
+#                 metrics[method]['max_class_cov_gap'].append(results[method][2]['max_gap'])
+#                 metrics[method]['marginal_cov'].append(results[method][2]['marginal_cov'])
+#                 metrics[method]['very_undercovered'].append(results[method][2]['very_undercovered'])
+#             except:
+#                 print(f'Missing {method} in {pth}')
+            
+# #     print(folder)
+# #     for method in methods:
+# #         print(method, metrics[method]['class_cov_gap'])
+            
+#     cov_means = []
+#     cov_ses = []
+#     set_size_means = []
+#     set_size_ses = []
+#     max_cov_gap_means = []
+#     max_cov_gap_ses = []
+#     marginal_cov_means = []
+#     marginal_cov_ses = []
+#     very_undercovered_means = []
+#     very_undercovered_ses = []
+    
+#     if print_results:
+#         print('Avg class coverage gap for each random seed:')
+#     for method in methods:
+#         n = num_seeds
+#         if print_results:
+#             print(f'  {method}:', np.array(metrics[method]['class_cov_gap'])*100)
+#         cov_means.append(np.mean(metrics[method]['class_cov_gap']))
+#         cov_ses.append(np.std(metrics[method]['class_cov_gap'])/np.sqrt(n))
+        
+#         set_size_means.append(np.mean(metrics[method]['avg_set_size']))
+#         set_size_ses.append(np.std(metrics[method]['avg_set_size'])/np.sqrt(n))
+        
+#         max_cov_gap_means.append(np.mean(metrics[method]['max_class_cov_gap']))
+#         max_cov_gap_ses.append(np.std(metrics[method]['max_class_cov_gap'])/np.sqrt(n))
+        
+#         marginal_cov_means.append(np.mean(metrics[method]['marginal_cov']))
+#         marginal_cov_ses.append(np.std(metrics[method]['marginal_cov'])/np.sqrt(n))
+        
+#         very_undercovered_means.append(np.mean(metrics[method]['very_undercovered']))
+#         very_undercovered_ses.append(np.std(metrics[method]['very_undercovered'])/np.sqrt(n))
+        
+#     df = pd.DataFrame({'method': methods,
+#                       'class_cov_gap_mean': np.array(cov_means)*100,
+#                       'class_cov_gap_se': np.array(cov_ses)*100,
+#                       'max_class_cov_gap_mean': np.array(max_cov_gap_means)*100,
+#                       'max_class_cov_gap_se': np.array(max_cov_gap_ses)*100,
+#                       'avg_set_size_mean': set_size_means,
+#                       'avg_set_size_se': set_size_ses,
+#                       'marginal_cov_mean': marginal_cov_means,
+#                       'marginal_cov_se': marginal_cov_ses,
+#                       'very_undercovered_mean': very_undercovered_means,
+#                       'very_undercovered_se': very_undercovered_ses})
+    
+#     if display_table:
+#         display(df) # For Jupyter notebooks
+        
+#     return df
 
 def average_results_across_seeds(folder, print_results=True, display_table=True, show_seed_ct=False, 
                                  methods=['standard', 'classwise', 'cluster_balanced'],
@@ -288,6 +376,8 @@ def average_results_across_seeds(folder, print_results=True, display_table=True,
                 metrics[method]['max_class_cov_gap'].append(results[method][2]['max_gap'])
                 metrics[method]['marginal_cov'].append(results[method][2]['marginal_cov'])
                 metrics[method]['very_undercovered'].append(results[method][2]['very_undercovered'])
+                metrics[method]['undercov_gap'].append(results[method][2]['undercov_gap']) # ADDED
+                metrics[method]['overcov_gap'].append(results[method][2]['overcov_gap']) # ADDED
             except:
                 print(f'Missing {method} in {pth}')
             
@@ -305,6 +395,10 @@ def average_results_across_seeds(folder, print_results=True, display_table=True,
     marginal_cov_ses = []
     very_undercovered_means = []
     very_undercovered_ses = []
+    undercov_means = []
+    undercov_ses = []
+    overcov_means = []
+    overcov_ses = []
     
     if print_results:
         print('Avg class coverage gap for each random seed:')
@@ -327,6 +421,12 @@ def average_results_across_seeds(folder, print_results=True, display_table=True,
         very_undercovered_means.append(np.mean(metrics[method]['very_undercovered']))
         very_undercovered_ses.append(np.std(metrics[method]['very_undercovered'])/np.sqrt(n))
         
+        undercov_means.append(np.mean(metrics[method]['undercov_gap']))
+        undercov_ses.append(np.std(metrics[method]['undercov_gap'])/np.sqrt(n))
+        
+        overcov_means.append(np.mean(metrics[method]['overcov_gap']))
+        overcov_ses.append(np.std(metrics[method]['overcov_gap'])/np.sqrt(n))
+        
     df = pd.DataFrame({'method': methods,
                       'class_cov_gap_mean': np.array(cov_means)*100,
                       'class_cov_gap_se': np.array(cov_ses)*100,
@@ -337,7 +437,11 @@ def average_results_across_seeds(folder, print_results=True, display_table=True,
                       'marginal_cov_mean': marginal_cov_means,
                       'marginal_cov_se': marginal_cov_ses,
                       'very_undercovered_mean': very_undercovered_means,
-                      'very_undercovered_se': very_undercovered_ses})
+                      'very_undercovered_se': very_undercovered_ses,
+                      'undercov_gap_mean': np.array(undercov_means)*100,
+                      'undercov_gap_se': np.array(undercov_ses)*100,
+                      'overcov_gap_mean': np.array(overcov_means)*100,
+                      'overcov_gap_se': np.array(overcov_ses)*100})
     
     if display_table:
         display(df) # For Jupyter notebooks
