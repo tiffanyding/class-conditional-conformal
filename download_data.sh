@@ -1,7 +1,7 @@
 mkdir data
 cd data
-gdown 17aPMP-o2kz-kdw9XCNF-6kf_TDterA7i # ImageNet (4.62 GB)
-gdown 141fXT6vmmiP-VToXYav3sJV1JlDkjazD # CIFAR-100 (0.01 GB)
-gdown 1pMqyZZ85tqQ4PLL4J8vLUxdLxsmxyIZf # Places365 (0.54 GB)
-gdown 13WWcWl3szSNOOqQsQu_ly-eOmOA-ohDV # iNaturalist (6.72 GB)
+gdown 1Ax-mP7PJXHEWo4TbUMru5vVjGjmpK5gE # ImageNet (4.62 GB)
+gdown 12huZJjuubElkMKB9y05M1Bz_VYH3E0T_ # CIFAR-100 (0.01 GB)
+gdown 1LtEDNYiru2hJIOlJFKfa2rS3z_oHcvC5 # Places365 (0.54 GB)
+gdown 1D8H_vgzRc66cHAukyOgT0GUm5_u8dX5x # iNaturalist (6.72 GB)
 cd .. 
